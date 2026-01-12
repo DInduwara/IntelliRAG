@@ -1,53 +1,75 @@
-export type QARequest = {
-  question: string;
-};
+import { getApiBaseUrl } from "./env";
+import type { IndexPdfResponse, QARequest, QAResponse } from "./types";
 
-export type QAResponse = {
-  answer: string;
-  sources?: Array<{
-    text?: string;
-    metadata?: Record<string, unknown>;
-  }>;
-};
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
 
-export type IndexPdfResponse = {
-  message?: string;
-  status?: string;
-};
+function pickMessage(errBody: unknown): string | null {
+  // FastAPI often returns: { detail: "..." } or { detail: [ ... ] }
+  if (!isRecord(errBody)) return null;
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+  const detail = errBody.detail;
+  if (typeof detail === "string") return detail;
 
-export async function askQuestion(
-  payload: QARequest
-): Promise<QAResponse> {
-  const res = await fetch(`${API_BASE_URL}/qa`, {
+  if (Array.isArray(detail)) {
+    // best-effort join validation errors
+    const msgs = detail
+      .map((d) => (isRecord(d) && typeof d.msg === "string" ? d.msg : null))
+      .filter((x): x is string => Boolean(x));
+    if (msgs.length) return msgs.join(", ");
+  }
+
+  const message = errBody.message;
+  if (typeof message === "string") return message;
+
+  return null;
+}
+
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const base = getApiBaseUrl();
+  const url = `${base}${path}`;
+
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const body = await safeJson(res);
+    const msg = pickMessage(body) ?? `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+
+  const data = (await safeJson(res)) as unknown;
+  return data as T;
+}
+
+export async function askQuestion(payload: QARequest): Promise<QAResponse> {
+  return request<QAResponse>("/qa", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to get answer");
-  }
-
-  return res.json();
 }
 
 export async function indexPdf(file: File): Promise<IndexPdfResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
+  const form = new FormData();
+  form.append("file", file);
 
-  const res = await fetch(`${API_BASE_URL}/index-pdf`, {
+  return request<IndexPdfResponse>("/index-pdf", {
     method: "POST",
-    body: formData,
+    body: form,
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to index PDF");
-  }
-
-  return res.json();
 }

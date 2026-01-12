@@ -1,110 +1,113 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { askQuestion } from "@/lib/api";
+import type { QAResponse } from "@/lib/types";
+import { Card, CardBody, CardHeader } from "@/components/Card";
+import { Button } from "@/components/Button";
+import { Spinner } from "@/components/Spinner";
 
-/* =======================
-   Types
-======================= */
-
-interface QARequest {
-  question: string;
-}
-
-interface QAResponse {
-  answer?: string;
-}
-
-/* =======================
-   API helper
-======================= */
-
-async function askQuestion(payload: QARequest): Promise<QAResponse> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}/qa`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Failed to fetch answer");
-  }
-
-  return res.json();
-}
-
-/* =======================
-   Page
-======================= */
-
-export default function HomePage() {
+export default function Page() {
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<QAResponse | null>(null);
 
-  const handleSubmit = async () => {
-    if (!question.trim()) return;
+  const canAsk = useMemo(() => question.trim().length > 2 && !loading, [question, loading]);
 
-    setAnswer(null);
+  async function onAsk() {
     setError(null);
+    setData(null);
 
     try {
       setLoading(true);
-      const res = await askQuestion({ question });
-      setAnswer(res.answer ?? "(No answer returned)");
+      const res = await askQuestion({ question: question.trim() });
+      setData(res);
     } catch (e: unknown) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError("Something went wrong.");
-      }
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl font-bold mb-4">
-          IntelliRAG – Question Answering
-        </h1>
-
-        <textarea
-          className="w-full border rounded p-3 mb-4 resize-none"
-          rows={4}
-          placeholder="Ask a question..."
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-        />
-
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 disabled:opacity-50"
-        >
-          {loading ? "Thinking..." : "Ask"}
-        </button>
-
-        {error && (
-          <p className="mt-4 text-red-600 font-medium">
-            {error}
-          </p>
-        )}
-
-        {answer && (
-          <div className="mt-6 p-4 bg-gray-50 border rounded">
-            <h2 className="font-semibold mb-2">Answer</h2>
-            <p className="whitespace-pre-wrap">{answer}</p>
-          </div>
-        )}
+    <div className="grid gap-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Ask IntelliRAG</h1>
+        <p className="mt-2 text-zinc-300/80">
+          Ask questions after indexing your PDF. Results come from your RAG backend.
+        </p>
       </div>
-    </main>
+
+      <Card>
+        <CardHeader
+          title="Question"
+          subtitle="Type a question and submit. Make sure your backend is running on port 8000."
+          right={
+            <Button onClick={onAsk} disabled={!canAsk}>
+              {loading ? "Asking..." : "Ask"}
+            </Button>
+          }
+        />
+        <CardBody>
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="e.g., What are the main challenges of vector databases?"
+            className="min-h-[120px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/40 p-4 text-sm
+                       placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/20"
+          />
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="text-xs text-zinc-400">
+              Tip: Index a PDF first in <span className="font-semibold text-zinc-200">Upload PDF</span>.
+            </div>
+            {loading ? <Spinner label="Calling /qa..." /> : null}
+          </div>
+
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Answer" subtitle="The assistant response returned by your API." />
+        <CardBody>
+          {data?.answer ? (
+            <div className="prose prose-invert max-w-none">
+              <p className="whitespace-pre-wrap leading-relaxed">{data.answer}</p>
+            </div>
+          ) : (
+            <div className="text-sm text-zinc-400">
+              No answer yet. Ask a question to see results here.
+            </div>
+          )}
+
+          {data?.sources?.length ? (
+            <div className="mt-6">
+              <div className="text-sm font-semibold">Sources</div>
+              <div className="mt-3 grid gap-3">
+                {data.sources.map((s, i) => (
+                  <div key={i} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs text-zinc-400">Source #{i + 1}</div>
+                    {s.text ? (
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-100/90">
+                        {s.text}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-zinc-400">(No text)</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </CardBody>
+      </Card>
+    </div>
   );
 }
