@@ -6,14 +6,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 function pickMessage(errBody: unknown): string | null {
-  // FastAPI often returns: { detail: "..." } or { detail: [ ... ] }
   if (!isRecord(errBody)) return null;
 
   const detail = errBody.detail;
   if (typeof detail === "string") return detail;
 
   if (Array.isArray(detail)) {
-    // best-effort join validation errors
     const msgs = detail
       .map((d) => (isRecord(d) && typeof d.msg === "string" ? d.msg : null))
       .filter((x): x is string => Boolean(x));
@@ -38,13 +36,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getApiBaseUrl();
   const url = `${base}${path}`;
 
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    // This is where "Failed to fetch" happens (CORS, backend down, etc.)
+    throw new Error(
+      `Cannot reach backend at ${base}. Make sure FastAPI is running and CORS is enabled.`
+    );
+  }
 
   if (!res.ok) {
     const body = await safeJson(res);

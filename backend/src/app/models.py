@@ -1,23 +1,27 @@
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 
 class QuestionRequest(BaseModel):
-    """Request body for the `/qa` endpoint.
-
-    The PRD specifies a single field named `question` that contains
-    the user's natural language question about the vector databases paper.
-    """
-
+    """Request body for the `/qa` endpoint."""
     question: str
+
+
+class SourceItem(BaseModel):
+    text: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class QAResponse(BaseModel):
     """Response body for the `/qa` endpoint.
 
-    From the API consumer's perspective we only expose the final,
-    verified answer plus some metadata (e.g. context snippets).
-    Internal draft answers remain inside the agent pipeline.
+    Frontend expects:
+      - answer
+      - optional sources[]
     """
 
     answer: str
-    context: str
+    # keep context for now (so you don't break anything internally),
+    # but make it optional so you can return "" if you want.
+    context: Optional[str] = ""
+    sources: Optional[List[SourceItem]] = None
