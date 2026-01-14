@@ -21,7 +21,7 @@ class QAResponse(BaseModel):
     """
 
     answer: str
+    context: str
     # keep context for now (so you don't break anything internally),
     # but make it optional so you can return "" if you want.
-    context: Optional[str] = ""
     sources: Optional[List[SourceItem]] = None

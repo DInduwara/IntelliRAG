@@ -2,8 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware  # ✅ use FastAPI import
-
+from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -11,6 +10,7 @@ load_dotenv()
 from .models import QuestionRequest, QAResponse
 from .services.qa_service import answer_question
 from .services.indexing_service import index_pdf_file
+from .core.config import get_settings  # ✅ adjust path if needed
 
 try:
     from openai import RateLimitError as OpenAIRateLimitError  # type: ignore
@@ -20,14 +20,11 @@ except Exception:
 
 app = FastAPI(
     title="Class 12 Multi-Agent RAG Demo",
-    description=(
-        "Demo API for asking questions about a vector databases paper. "
-        "The `/qa` endpoint currently returns placeholder responses and "
-        "will be wired to a multi-agent RAG pipeline in later user stories."
-    ),
+    description="Demo API for asking questions + indexing PDFs.",
     version="0.1.0",
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -38,6 +35,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+#  fail-fast config check + helpful logs
+@app.on_event("startup")
+async def validate_config() -> None:
+    s = get_settings()
+
+    missing = []
+    if not s.openai_api_key:
+        missing.append("OPENAI_API_KEY")
+    if not s.pinecone_api_key:
+        missing.append("PINECONE_API_KEY")
+    if not s.pinecone_index_name:
+        missing.append("PINECONE_INDEX_NAME")
+
+    if missing:
+        raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+
+    print("Config loaded")
+    print(f"OpenAI chat model: {s.openai_model_name}")
+    print(f"OpenAI embedding model: {s.openai_embedding_model_name} (expected dim=3072)")
+    print(f"Pinecone index: {s.pinecone_index_name}")
 
 
 @app.exception_handler(Exception)
@@ -51,9 +69,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             content={"detail": "OpenAI quota/rate-limit: check your API key billing/quota, then retry."},
         )
 
+    # expose safe error message (useful for debugging in dev)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"},
+        content={"detail": str(exc)},
     )
 
 
@@ -68,11 +87,10 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
 
     result = answer_question(question)
 
-    # Only return fields that exist in QAResponse
     return QAResponse(
-    answer=result.get("answer", ""),
-    context=result.get("context", "") or "",
-    sources=result.get("sources"),
+        answer=result.get("answer", ""),
+        context=result.get("context", "") or "",
+        sources=result.get("sources"),
     )
 
 
@@ -91,7 +109,10 @@ async def index_pdf(file: UploadFile = File(...)) -> dict:
     contents = await file.read()
     file_path.write_bytes(contents)
 
-    chunks_indexed = index_pdf_file(file_path)
+    try:
+        chunks_indexed = index_pdf_file(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
 
     return {
         "filename": file.filename,
