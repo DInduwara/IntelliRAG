@@ -1,25 +1,29 @@
-"""
-Configuration management for the multi-agent RAG system.
-Loads and validates environment variables.
+"""Configuration management for the multi-agent RAG system.
+
+Loads and validates environment variables for OpenAI models, Pinecone settings,
+and retrieval parameters using Pydantic Settings.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # OpenAI
+    # OpenAI Configuration
     openai_api_key: str
     openai_model_name: str = "gpt-4o-mini"
 
-    # locked to 3072 dims
+    # IMPORTANT: use OPENAI_EMBEDDING_MODEL_NAME in .env
     openai_embedding_model_name: str = "text-embedding-3-large"
 
-    # Pinecone
+    # Pinecone Configuration
     pinecone_api_key: str
     pinecone_index_name: str
 
-    # Retrieval
+    # Retrieval Configuration
     retrieval_k: int = 4
+
+    # Frontend / CORS
+    frontend_origin: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=".env",

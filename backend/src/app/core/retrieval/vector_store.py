@@ -1,30 +1,28 @@
 """Vector store wrapper for Pinecone integration with LangChain."""
 
 from functools import lru_cache
-from typing import List, Any
+from typing import List
 
 from pinecone import Pinecone
 from pinecone.exceptions import PineconeApiException
 
 from langchain_core.documents import Document
-from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ..config import get_settings
 
-#  locked to text-embedding-3-large
 EXPECTED_EMBED_DIM = 3072
 
 
 def _extract_index_dimension(pc: Pinecone, index_name: str) -> int | None:
     """
-    Pinecone SDK versions differ a bit.
-    Try multiple ways to get dimension, return None if not found.
+    Pinecone SDK versions differ slightly.
+    Try multiple ways to get dimension. Return None if not found.
     """
     try:
         info = pc.describe_index(index_name)
-        # could be object with .dimension or dict with ["dimension"]
         if hasattr(info, "dimension"):
             return int(info.dimension)
         if isinstance(info, dict) and "dimension" in info:
@@ -40,12 +38,11 @@ def _get_vector_store() -> PineconeVectorStore:
 
     pc = Pinecone(api_key=settings.pinecone_api_key)
 
-    #  dimension guard (fast fail)
     index_dim = _extract_index_dimension(pc, settings.pinecone_index_name)
     if index_dim is not None and index_dim != EXPECTED_EMBED_DIM:
         raise RuntimeError(
             f"Pinecone index dimension mismatch: index={index_dim}, expected={EXPECTED_EMBED_DIM}. "
-            f"You must recreate Pinecone index to {EXPECTED_EMBED_DIM} OR change OPENAI_EMBEDDING_MODEL_NAME."
+            f"Recreate the Pinecone index to {EXPECTED_EMBED_DIM} OR change OPENAI_EMBEDDING_MODEL_NAME."
         )
 
     index = pc.Index(settings.pinecone_index_name)
@@ -62,6 +59,7 @@ def get_retriever(k: int | None = None):
     settings = get_settings()
     if k is None:
         k = settings.retrieval_k
+
     vector_store = _get_vector_store()
     return vector_store.as_retriever(search_kwargs={"k": k})
 
@@ -83,7 +81,6 @@ def index_documents(docs: List[Document]) -> int:
     try:
         vector_store.add_documents(chunks)
     except PineconeApiException as e:
-        # make Pinecone errors clearer (esp dimension mismatch)
         raise RuntimeError(f"Pinecone upsert failed: {e}") from e
 
     return len(chunks)

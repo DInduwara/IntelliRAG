@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -10,7 +10,7 @@ load_dotenv()
 from .models import QuestionRequest, QAResponse
 from .services.qa_service import answer_question
 from .services.indexing_service import index_pdf_file
-from .core.config import get_settings  # ✅ adjust path if needed
+from .core.config import get_settings
 
 try:
     from openai import RateLimitError as OpenAIRateLimitError  # type: ignore
@@ -24,19 +24,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-#  fail-fast config check + helpful logs
 @app.on_event("startup")
 async def validate_config() -> None:
     s = get_settings()
@@ -54,8 +42,19 @@ async def validate_config() -> None:
 
     print("Config loaded")
     print(f"OpenAI chat model: {s.openai_model_name}")
-    print(f"OpenAI embedding model: {s.openai_embedding_model_name} (expected dim=3072)")
+    print(f"OpenAI embedding model: {s.openai_embedding_model_name}")
     print(f"Pinecone index: {s.pinecone_index_name}")
+    print(f"Frontend origin: {s.frontend_origin}")
+
+
+settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(Exception)
@@ -69,7 +68,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             content={"detail": "OpenAI quota/rate-limit: check your API key billing/quota, then retry."},
         )
 
-    # expose safe error message (useful for debugging in dev)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": str(exc)},
