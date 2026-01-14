@@ -17,11 +17,9 @@ class QAResponse(BaseModel):
 
     Frontend expects:
       - answer
+      - context
       - optional sources[]
     """
-
     answer: str
-    # keep context for now (so you don't break anything internally),
-    # but make it optional so you can return "" if you want.
-    context: Optional[str] = ""
+    context: str
     sources: Optional[List[SourceItem]] = None
