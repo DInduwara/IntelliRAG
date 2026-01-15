@@ -11,6 +11,9 @@ export type QAResponse = {
   answer: string;
   context: string;
   citations?: CitationsMap;
+
+  confidence?: "high" | "medium" | "low";
+
 };
 
 export type IndexPdfResponse = {

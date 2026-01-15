@@ -57,10 +57,12 @@ def retrieval_node(state: QAState) -> QAState:
         context = str(last_tool.content)
 
         artifact = last_tool.artifact
+
+        # retrieval_tool returns (context, citations) -> artifact IS the citations dict
         if isinstance(artifact, dict):
-            citations_val = artifact.get("citations")
-            if isinstance(citations_val, dict):
-                citations = citations_val
+            citations = artifact
+        else:
+            citations = {}
 
     return {**state, "context": context, "citations": citations}
 

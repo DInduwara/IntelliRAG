@@ -86,15 +86,19 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
     result = answer_question(question)
 
     citations = result.get("citations") or None
+    confidence = result.get("confidence", "low")
 
     # (optional dev log)
     if citations:
         print(f"/qa citations returned: {len(citations)}")
+    else:
+        print(f"/qa citations returned: 0 (confidence={confidence})")
 
     return QAResponse(
         answer=result.get("answer", "") or "",
         context=result.get("context", "") or "",
         citations=citations,
+        confidence=confidence,
     )
 
 

@@ -10,7 +10,8 @@ export function Card({
   return (
     <div
       className={
-        "rounded-2xl border border-white/10 bg-white/5 shadow-sm " + className
+        "rounded-3xl border border-white/10 bg-white/[0.04] shadow-[0_10px_40px_rgba(0,0,0,0.45)] backdrop-blur " +
+        className
       }
     >
       {children}
@@ -28,9 +29,9 @@ export function CardHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
+    <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
       <div>
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-100">{title}</h2>
         {subtitle ? (
           <p className="mt-1 text-sm text-zinc-300/80">{subtitle}</p>
         ) : null}
@@ -41,5 +42,5 @@ export function CardHeader({
 }
 
 export function CardBody({ children }: { children: ReactNode }) {
-  return <div className="px-5 py-4">{children}</div>;
+  return <div className="px-6 py-5">{children}</div>;
 }

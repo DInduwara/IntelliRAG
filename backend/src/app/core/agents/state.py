@@ -1,7 +1,7 @@
 """LangGraph state schema for the multi-agent QA flow."""
 
 from __future__ import annotations
-from typing import Dict, TypedDict
+from typing import Dict, NotRequired, TypedDict
 
 
 class QAState(TypedDict):
@@ -10,3 +10,5 @@ class QAState(TypedDict):
     citations: Dict[str, dict] | None
     draft_answer: str | None
     answer: str | None
+    confidence: NotRequired[str]
+    
