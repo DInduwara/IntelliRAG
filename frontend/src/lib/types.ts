@@ -1,13 +1,16 @@
-export type SourceItem = {
-  text?: string;
-  metadata?: Record<string, unknown>;
+export type CitationItem = {
+  page?: number | string;
+  page_label?: string | number;
+  source?: string;
+  snippet?: string;
 };
+
+export type CitationsMap = Record<string, CitationItem>;
 
 export type QAResponse = {
   answer: string;
-  // backend currently returns context (not sources) — keep optional
-  context?: string;
-  sources?: SourceItem[];
+  context: string;
+  citations?: CitationsMap;
 };
 
 export type IndexPdfResponse = {
