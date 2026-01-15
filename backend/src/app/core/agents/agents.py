@@ -1,4 +1,6 @@
-from typing import List, Dict, Any
+from __future__ import annotations
+
+from typing import Any, Dict, List
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -47,62 +49,54 @@ def retrieval_node(state: QAState) -> QAState:
     context = ""
     citations: Dict[str, Any] = {}
 
-    for msg in reversed(result.get("messages", [])):
-        if isinstance(msg, ToolMessage):
-            context = str(msg.content)
-            citations = msg.artifact or {}
-            break
+    messages = result.get("messages", []) or []
+    tool_msgs = [m for m in messages if isinstance(m, ToolMessage)]
 
-    return {
-        **state,
-        "context": context,
-        "citations": citations,
-    }
+    if tool_msgs:
+        last_tool = tool_msgs[-1]
+        context = str(last_tool.content)
+
+        artifact = last_tool.artifact
+        if isinstance(artifact, dict):
+            citations_val = artifact.get("citations")
+            if isinstance(citations_val, dict):
+                citations = citations_val
+
+    return {**state, "context": context, "citations": citations}
 
 
 def summarization_node(state: QAState) -> QAState:
     question = state["question"]
-    context = state.get("context", "")
+    context = state.get("context") or ""
 
     user_content = (
         f"Question:\n{question}\n\n"
-        f"Context (use citations exactly as provided):\n{context}\n"
+        f"CONTEXT:\n{context}\n"
     )
 
     result = summarization_agent.invoke({"messages": [HumanMessage(content=user_content)]})
-    draft_answer = _extract_last_ai_content(result.get("messages", []))
+    draft_answer = _extract_last_ai_content(result.get("messages", []) or [])
 
-    return {
-        **state,
-        "draft_answer": draft_answer,
-    }
+    return {**state, "draft_answer": draft_answer}
 
 
 def verification_node(state: QAState) -> QAState:
     question = state["question"]
-    context = state.get("context", "")
-    draft_answer = state.get("draft_answer", "")
+    context = state.get("context") or ""
+    draft_answer = state.get("draft_answer") or ""
 
     user_content = f"""
 Question:
 {question}
 
-Context:
+CONTEXT:
 {context}
 
-Draft Answer (with citations):
+Draft Answer:
 {draft_answer}
-
-Rules:
-- Preserve valid citations like [C1], [C2]
-- Remove citations if the claim is removed
-- Do NOT invent new citations
-"""
+""".strip()
 
     result = verification_agent.invoke({"messages": [HumanMessage(content=user_content)]})
-    answer = _extract_last_ai_content(result.get("messages", []))
+    answer = _extract_last_ai_content(result.get("messages", []) or [])
 
-    return {
-        **state,
-        "answer": answer,
-    }
+    return {**state, "answer": answer}

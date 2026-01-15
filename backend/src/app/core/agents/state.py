@@ -1,5 +1,6 @@
 """LangGraph state schema for the multi-agent QA flow."""
 
+from __future__ import annotations
 from typing import Dict, TypedDict
 
 

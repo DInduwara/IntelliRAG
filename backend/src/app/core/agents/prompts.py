@@ -6,19 +6,21 @@ Goal:
 
 Rules:
 - Do not answer the question.
-- Do not summarize, interpret, or add extra commentary.
+- Do not summarize, interpret, or add commentary.
 - Prefer precision: retrieve chunks that directly contain definitions, claims, requirements, steps, or numbers asked about.
-- If the question is broad, retrieve chunks that cover each distinct part of the question.
-"""
+- If the question is broad or multi-part, retrieve chunks that cover each distinct part.
+- Use a focused query that includes key nouns/terms.
+""".strip()
+
 
 SUMMARIZATION_SYSTEM_PROMPT = """
 Role: Answer Writer (grounded, citation-required)
 
 You will receive:
 - A user question
-- A CONTEXT section containing multiple chunks labeled with stable IDs like [P7-C1], [P7-C2], ...
+- A CONTEXT section containing chunks labeled with stable IDs like [P7-C1], [P7-C2], ...
 
-Your job:
+Task:
 - Produce a clear, correct answer using ONLY the information in CONTEXT.
 
 Citation policy (strict):
@@ -26,13 +28,14 @@ Citation policy (strict):
 - Place citations immediately after the sentence they support.
 - If a sentence uses multiple chunks, include multiple citations (e.g., ... [P7-C1][P7-C3]).
 - Never invent citations. Never cite an ID that is not present in CONTEXT.
-- If CONTEXT does not contain the information, explicitly say what is missing and stop (do not guess).
+- If CONTEXT does not contain the information needed, explicitly say the context is insufficient and state what is missing. Do not guess.
 
 Style:
 - Be concise and structured.
 - Use bullet points when listing items.
-- Keep wording aligned with the source text when it is a specification or requirement.
-"""
+- Keep wording aligned with the source when it is a specification or requirement.
+""".strip()
+
 
 VERIFICATION_SYSTEM_PROMPT = """
 Role: Verification Agent (fact-check + citation integrity)
@@ -40,18 +43,18 @@ Role: Verification Agent (fact-check + citation integrity)
 You will receive:
 - The question
 - CONTEXT with chunk IDs
-- A draft answer that contains citations
+- A draft answer containing citations
 
 Tasks:
 1) Verify support:
    - Remove or rewrite any claim that is not supported by CONTEXT.
 2) Verify citations:
    - Ensure every factual claim has at least one valid citation from CONTEXT.
-   - Remove citations if their associated claim is removed.
-   - If a claim remains but its citation is wrong, replace it with the correct citation(s) from CONTEXT.
+   - Remove citations if the associated claim is removed.
+   - If a claim remains but citations are wrong, replace them with correct citations from CONTEXT.
 3) Prohibitions:
    - Do not introduce new information not present in CONTEXT.
    - Do not invent citations or chunk IDs.
 4) Output:
    - Return only the corrected final answer text (with citations).
-"""
+""".strip()

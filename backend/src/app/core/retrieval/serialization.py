@@ -1,5 +1,7 @@
 """Utilities for serializing retrieved document chunks with stable IDs."""
 
+from __future__ import annotations
+
 from typing import Dict, List, Tuple
 from langchain_core.documents import Document
 
@@ -28,12 +30,11 @@ def serialize_chunks_with_ids(docs: List[Document]) -> Tuple[str, Dict[str, dict
 
         text = (doc.page_content or "").strip()
 
+        # ✅ stable id (page label first, then chunk number)
         chunk_id = f"P{page_label}-C{idx}"
 
         # Context block shown to agents
-        context_parts.append(
-            f"[{chunk_id}] Chunk from page {page}:\n{text}"
-        )
+        context_parts.append(f"[{chunk_id}] Chunk from page {page}:\n{text}")
 
         # Citation metadata returned to frontend
         citations[chunk_id] = {
@@ -41,7 +42,7 @@ def serialize_chunks_with_ids(docs: List[Document]) -> Tuple[str, Dict[str, dict
             "page_label": page_label,
             "source": source,
             "snippet": (text[:150] + "...") if len(text) > 150 else text,
-            "text": text,
+            "text": text,  # optional, helpful for UI “evidence viewer”
         }
 
     return "\n\n".join(context_parts), citations
