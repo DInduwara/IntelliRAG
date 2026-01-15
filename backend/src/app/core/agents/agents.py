@@ -1,10 +1,7 @@
-"""Agent implementations for the multi-agent RAG flow."""
-
-from typing import List, Any, Dict
+from typing import List, Dict, Any
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.documents import Document
 
 from ..llm.factory import create_chat_model
 from .prompts import (
@@ -21,18 +18,6 @@ def _extract_last_ai_content(messages: List[object]) -> str:
         if isinstance(msg, AIMessage):
             return str(msg.content)
     return ""
-
-
-def _docs_to_sources(docs: List[Document]) -> List[Dict[str, Any]]:
-    sources: List[Dict[str, Any]] = []
-    for d in docs:
-        sources.append(
-            {
-                "text": (d.page_content or "")[:300],
-                "metadata": d.metadata or {},
-            }
-        )
-    return sources
 
 
 retrieval_agent = create_agent(
@@ -58,57 +43,66 @@ def retrieval_node(state: QAState) -> QAState:
     question = state["question"]
 
     result = retrieval_agent.invoke({"messages": [HumanMessage(content=question)]})
-    messages = result.get("messages", [])
 
     context = ""
-    sources = None
+    citations: Dict[str, Any] = {}
 
-    for msg in reversed(messages):
+    for msg in reversed(result.get("messages", [])):
         if isinstance(msg, ToolMessage):
             context = str(msg.content)
-
-            docs = getattr(msg, "artifact", None)
-            if isinstance(docs, list) and all(isinstance(x, Document) for x in docs):
-                sources = _docs_to_sources(docs)
+            citations = msg.artifact or {}
             break
 
     return {
+        **state,
         "context": context,
-        "sources": sources,
+        "citations": citations,
     }
 
 
 def summarization_node(state: QAState) -> QAState:
     question = state["question"]
-    context = state.get("context") or ""
+    context = state.get("context", "")
 
-    user_content = f"Question: {question}\n\nContext:\n{context}"
+    user_content = (
+        f"Question:\n{question}\n\n"
+        f"Context (use citations exactly as provided):\n{context}\n"
+    )
 
     result = summarization_agent.invoke({"messages": [HumanMessage(content=user_content)]})
-    messages = result.get("messages", [])
-    draft_answer = _extract_last_ai_content(messages)
+    draft_answer = _extract_last_ai_content(result.get("messages", []))
 
     return {
+        **state,
         "draft_answer": draft_answer,
     }
 
 
 def verification_node(state: QAState) -> QAState:
     question = state["question"]
-    context = state.get("context") or ""
-    draft_answer = state.get("draft_answer") or ""
+    context = state.get("context", "")
+    draft_answer = state.get("draft_answer", "")
 
-    user_content = (
-        f"Question: {question}\n\n"
-        f"Context:\n{context}\n\n"
-        f"Draft Answer:\n{draft_answer}\n\n"
-        "Please verify and correct the draft answer, removing any unsupported claims."
-    )
+    user_content = f"""
+Question:
+{question}
+
+Context:
+{context}
+
+Draft Answer (with citations):
+{draft_answer}
+
+Rules:
+- Preserve valid citations like [C1], [C2]
+- Remove citations if the claim is removed
+- Do NOT invent new citations
+"""
 
     result = verification_agent.invoke({"messages": [HumanMessage(content=user_content)]})
-    messages = result.get("messages", [])
-    answer = _extract_last_ai_content(messages)
+    answer = _extract_last_ai_content(result.get("messages", []))
 
     return {
+        **state,
         "answer": answer,
     }
