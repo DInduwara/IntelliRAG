@@ -20,3 +20,4 @@ def retrieval_tool(query: str):
     context, citations = serialize_chunks_with_ids(docs)
 
     return context, citations
+
