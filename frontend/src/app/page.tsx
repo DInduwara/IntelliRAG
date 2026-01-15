@@ -6,14 +6,8 @@ import type { QAResponse, CitationsMap } from "@/lib/types";
 import { Card, CardBody, CardHeader } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Spinner } from "@/components/Spinner";
-
-function extractCitationIds(answer: string): string[] {
-  const re = /\[([^\[\]\n]{1,40})\]/g;
-  const ids: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(answer)) !== null) ids.push(m[1]);
-  return Array.from(new Set(ids));
-}
+import { CitationTag } from "@/components/CitationTag";
+import { extractCitationIds, tokenizeAnswer } from "@/lib/citations";
 
 function formatPageLabel(item?: { page?: string | number; page_label?: string | number }) {
   if (!item) return "unknown";
@@ -31,12 +25,6 @@ function evidenceElementId(citationId: string) {
   return `evidence-${encodeURIComponent(citationId)}`;
 }
 
-function badgeClass(conf: QAResponse["confidence"] | undefined) {
-  if (conf === "high") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-100";
-  if (conf === "medium") return "border-amber-500/30 bg-amber-500/10 text-amber-100";
-  return "border-red-500/30 bg-red-500/10 text-red-100";
-}
-
 export default function Page() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -45,14 +33,15 @@ export default function Page() {
   const [data, setData] = useState<QAResponse | null>(null);
 
   const [showContext, setShowContext] = useState(false);
-
-  // Default: showOnlyCited = true, but if answer has no citations, auto show all evidence
   const [showOnlyCited, setShowOnlyCited] = useState(true);
 
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const highlightTimer = useRef<number | null>(null);
 
-  const canAsk = useMemo(() => question.trim().length > 2 && !loading, [question, loading]);
+  const canAsk = useMemo(
+    () => question.trim().length > 2 && !loading,
+    [question, loading]
+  );
 
   const citations: CitationsMap = data?.citations ?? {};
 
@@ -63,24 +52,18 @@ export default function Page() {
 
   const citedSet = useMemo(() => new Set(citationIds), [citationIds]);
 
-  const hasAnswer = Boolean(data?.answer);
-  const hasCitations = Boolean(data?.citations && Object.keys(data.citations).length);
-
-  // If answer has 0 citation tokens, showing "only cited" becomes useless.
-  // Force evidence list to show all in that case.
-  const effectiveShowOnlyCited = showOnlyCited && citationIds.length > 0;
-
   const evidenceEntries = useMemo(() => {
     const entries = Object.entries(citations);
     if (!entries.length) return [];
-    if (!effectiveShowOnlyCited) return entries;
+    if (!showOnlyCited) return entries;
     return entries.filter(([id]) => citedSet.has(id));
-  }, [citations, effectiveShowOnlyCited, citedSet]);
+  }, [citations, showOnlyCited, citedSet]);
 
   function jumpToEvidence(id: string) {
     const el = document.getElementById(evidenceElementId(id));
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
+
       setHighlightId(id);
       if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
       highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1200);
@@ -113,14 +96,18 @@ export default function Page() {
     }
   }
 
+  const hasAnswer = Boolean(data?.answer);
+  const hasCitations = Boolean(data?.citations && Object.keys(data.citations).length);
   const filteredCount = evidenceEntries.length;
   const totalCount = hasCitations ? Object.keys(citations).length : 0;
 
   const confidence = data?.confidence ?? "low";
-  const confidenceHint =
-    confidence === "low"
-      ? "Low confidence usually means the answer has weak or missing citations from the indexed document."
-      : null;
+  const confidenceTone =
+    confidence === "high"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
+      : confidence === "medium"
+        ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
+        : "border-red-500/30 bg-red-500/10 text-red-100";
 
   return (
     <div className="grid gap-6">
@@ -128,7 +115,7 @@ export default function Page() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Ask IntelliRAG</h1>
           <p className="mt-2 text-zinc-300/80">
-            Ask questions after indexing your PDF. Answers include evidence citations you can inspect.
+            Ask questions after indexing your PDF. Citations in the answer are clickable.
           </p>
         </div>
         <div className="hidden sm:block text-xs text-zinc-400">
@@ -158,7 +145,8 @@ export default function Page() {
 
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="text-xs text-zinc-400">
-                Tip: Index a PDF first in <span className="font-semibold text-zinc-200">Upload PDF</span>.
+                Tip: Index a PDF first in{" "}
+                <span className="font-semibold text-zinc-200">Upload PDF</span>.
               </div>
               {asking ? <Spinner label="Calling /qa..." /> : null}
             </div>
@@ -182,7 +170,7 @@ export default function Page() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className={`rounded-xl border px-3 py-1 text-xs font-semibold ${badgeClass(confidence)}`}>
+                    <div className={`rounded-xl border px-3 py-1 text-xs font-semibold ${confidenceTone}`}>
                       Confidence: {confidence}
                     </div>
 
@@ -193,16 +181,10 @@ export default function Page() {
                       disabled={!hasCitations}
                       title="Filter evidence cards"
                     >
-                      {effectiveShowOnlyCited ? "Showing: cited" : "Showing: all"}
+                      {showOnlyCited ? "Showing: cited" : "Showing: all"}
                     </button>
                   </div>
                 </div>
-
-                {confidenceHint ? (
-                  <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100">
-                    {confidenceHint}
-                  </div>
-                ) : null}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {citationIds.length ? (
@@ -219,7 +201,7 @@ export default function Page() {
                     ))
                   ) : (
                     <div className="text-xs text-zinc-400">
-                      Your prompts require citations. If none appear, the verification agent likely removed them or the answer is unsupported.
+                      If none appear, your indexed PDF probably does not contain the answer.
                     </div>
                   )}
                 </div>
@@ -247,14 +229,24 @@ export default function Page() {
 
         <div className="grid gap-6">
           <Card>
-            <CardHeader title="Answer" subtitle="The assistant response returned by your API." />
+            <CardHeader title="Answer" subtitle="Click citations to jump to evidence." />
             <CardBody>
               {hasAnswer ? (
                 <div className="prose prose-invert max-w-none">
-                  <p className="whitespace-pre-wrap leading-relaxed">{data?.answer}</p>
+                  <div className="whitespace-pre-wrap leading-relaxed">
+                    {tokenizeAnswer(data?.answer ?? "").map((t, i) =>
+                      t.type === "text" ? (
+                        <span key={i}>{t.value}</span>
+                      ) : (
+                        <CitationTag key={`${t.id}-${i}`} id={t.id} onClick={jumpToEvidence} />
+                      )
+                    )}
+                  </div>
                 </div>
               ) : (
-                <div className="text-sm text-zinc-400">No answer yet. Ask a question to see results here.</div>
+                <div className="text-sm text-zinc-400">
+                  No answer yet. Ask a question to see results here.
+                </div>
               )}
             </CardBody>
           </Card>
@@ -266,7 +258,9 @@ export default function Page() {
               right={
                 hasCitations ? (
                   <div className="text-xs text-zinc-400">
-                    Showing <span className="text-zinc-200 font-semibold">{filteredCount}</span> /{" "}
+                    Showing{" "}
+                    <span className="text-zinc-200 font-semibold">{filteredCount}</span>{" "}
+                    /{" "}
                     <span className="text-zinc-200 font-semibold">{totalCount}</span>
                   </div>
                 ) : null
@@ -303,8 +297,14 @@ export default function Page() {
                           </div>
 
                           <div className="text-xs text-zinc-400">
-                            Page <span className="text-zinc-200 font-semibold">{formatPageLabel(meta)}</span> •{" "}
-                            <span className="text-zinc-200 font-semibold">{formatSource(meta.source)}</span>
+                            Page{" "}
+                            <span className="text-zinc-200 font-semibold">
+                              {formatPageLabel(meta)}
+                            </span>{" "}
+                            •{" "}
+                            <span className="text-zinc-200 font-semibold">
+                              {formatSource(meta.source)}
+                            </span>
                           </div>
                         </div>
 
@@ -314,7 +314,8 @@ export default function Page() {
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="text-xs text-zinc-500">
-                            Source: <span className="text-zinc-300">{formatSource(meta.source)}</span>
+                            Source:{" "}
+                            <span className="text-zinc-300">{formatSource(meta.source)}</span>
                           </div>
                           <button
                             type="button"
@@ -332,7 +333,9 @@ export default function Page() {
                   })}
                 </div>
               ) : (
-                <div className="text-sm text-zinc-400">No citations returned yet. Ask a question after indexing a PDF.</div>
+                <div className="text-sm text-zinc-400">
+                  No citations returned yet. Ask a question after indexing a PDF.
+                </div>
               )}
             </CardBody>
           </Card>
