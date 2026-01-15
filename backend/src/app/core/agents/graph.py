@@ -30,7 +30,9 @@ def get_qa_graph() -> Any:
     return create_qa_graph()
 
 
-def run_qa_flow(question: str) -> Dict[str, Any]:
+from .state import QAState
+
+def run_qa_flow(question: str) -> QAState:
     graph = get_qa_graph()
 
     initial_state: QAState = {
@@ -41,5 +43,6 @@ def run_qa_flow(question: str) -> Dict[str, Any]:
         "answer": None,
     }
 
-    final_state = graph.invoke(initial_state)
+    final_state: QAState = graph.invoke(initial_state)
     return final_state
+

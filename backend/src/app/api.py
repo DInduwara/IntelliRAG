@@ -1,6 +1,4 @@
 from pathlib import Path
-import re
-from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,36 +23,6 @@ app = FastAPI(
     description="Demo API for asking questions + indexing PDFs.",
     version="0.1.0",
 )
-
-# Citation tags like [P7-C1] or [P7-C12]
-_CITATION_TAG_RE = re.compile(r"\[(P[^\]]+?-C\d+)\]")
-
-
-def strip_invalid_citations(answer: str, citations: Optional[Dict[str, Any]]) -> str:
-    """
-    Remove citation tags that are not present in citations map.
-
-    Behavior:
-    - If citations is None/empty: removes all citation tags.
-    - If citations exists: keeps only tags that appear in citations keys.
-    - Normalizes extra whitespace after removals.
-    """
-    if not answer:
-        return answer
-
-    if not citations:
-        cleaned = _CITATION_TAG_RE.sub("", answer)
-        return re.sub(r"\s{2,}", " ", cleaned).strip()
-
-    valid_ids = set(citations.keys())
-
-    def repl(match: re.Match) -> str:
-        cid = match.group(1)
-        return match.group(0) if cid in valid_ids else ""
-
-    cleaned = _CITATION_TAG_RE.sub(repl, answer)
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
-    return cleaned
 
 
 @app.on_event("startup")
@@ -117,14 +85,14 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
 
     result = answer_question(question)
 
-    citations = result.get("citations")
-    answer = result.get("answer", "")
+    citations = result.get("citations") or None
 
-    # Remove any citations that are not in the returned citation map
-    answer = strip_invalid_citations(answer, citations)
+    # (optional dev log)
+    if citations:
+        print(f"/qa citations returned: {len(citations)}")
 
     return QAResponse(
-        answer=answer,
+        answer=result.get("answer", "") or "",
         context=result.get("context", "") or "",
         citations=citations,
     )

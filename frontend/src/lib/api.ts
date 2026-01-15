@@ -46,7 +46,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       cache: "no-store",
     });
   } catch {
-    // This is where "Failed to fetch" happens (CORS, backend down, etc.)
     throw new Error(
       `Cannot reach backend at ${base}. Make sure FastAPI is running and CORS is enabled.`
     );

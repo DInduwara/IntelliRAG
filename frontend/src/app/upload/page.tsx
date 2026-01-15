@@ -10,17 +10,20 @@ export default function UploadPage() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [chunks, setChunks] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onFile(file: File) {
     setError(null);
     setStatus(null);
+    setChunks(null);
     setFileName(file.name);
 
     try {
       setLoading(true);
       const res = await indexPdf(file);
       setStatus(res.message ?? res.status ?? "Indexed successfully");
+      setChunks(typeof res.chunks_indexed === "number" ? res.chunks_indexed : null);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed.";
       setError(msg);
@@ -34,12 +37,15 @@ export default function UploadPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Upload PDF</h1>
         <p className="mt-2 text-zinc-300/80">
-          Upload a PDF to index into Pinecone. Then go back to <span className="font-semibold text-zinc-200">Ask</span>.
+          Upload a PDF to index into Pinecone. After indexing, go back to <span className="font-semibold text-zinc-200">Ask</span>.
         </p>
       </div>
 
       <Card>
-        <CardHeader title="Index a PDF" subtitle="This calls POST /index-pdf on your FastAPI backend." />
+        <CardHeader
+          title="Index a PDF"
+          subtitle="This calls POST /index-pdf on your FastAPI backend."
+        />
         <CardBody>
           <FileDropzone onFile={onFile} />
 
@@ -58,7 +64,12 @@ export default function UploadPage() {
 
           {status ? (
             <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-              {status}
+              <div className="font-semibold">{status}</div>
+              {chunks !== null ? (
+                <div className="mt-1 text-emerald-100/90">
+                  Chunks indexed: <span className="font-semibold">{chunks}</span>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
