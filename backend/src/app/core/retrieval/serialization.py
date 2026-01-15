@@ -1,36 +1,47 @@
-"""Utilities for serializing retrieved document chunks."""
+"""Utilities for serializing retrieved document chunks with stable IDs."""
 
-from typing import List
-
+from typing import Dict, List, Tuple
 from langchain_core.documents import Document
 
 
-def serialize_chunks(docs: List[Document]) -> str:
-    """Serialize a list of Document objects into a formatted CONTEXT string.
+def serialize_chunks_with_ids(docs: List[Document]) -> Tuple[str, Dict[str, dict]]:
+    """
+    Serialize documents into a citation-aware CONTEXT string.
 
-    Formats chunks with indices and page numbers as specified in the PRD:
-    - Chunks are numbered (Chunk 1, Chunk 2, etc.)
-    - Page numbers are included in the format "page=X"
-    - Produces a clean CONTEXT section for agent consumption
-
-    Args:
-        docs: List of Document objects with metadata.
+    IDs format: P{page_label}-C{idx}
+      - page_label comes from PDF page label if available (often 1-based)
+      - idx is the position within the retrieved list
 
     Returns:
-        Formatted string with all chunks serialized.
+        context_str: formatted context with chunk IDs
+        citations: chunk_id -> metadata mapping (for API/UI)
     """
-    context_parts = []
+    context_parts: List[str] = []
+    citations: Dict[str, dict] = {}
 
     for idx, doc in enumerate(docs, start=1):
-        # Extract page number from metadata
-        page_num = doc.metadata.get("page") or doc.metadata.get(
-            "page_number", "unknown"
+        metadata = doc.metadata or {}
+
+        page = metadata.get("page", "unknown")
+        page_label = metadata.get("page_label", page)
+        source = metadata.get("source", "unknown")
+
+        text = (doc.page_content or "").strip()
+
+        chunk_id = f"P{page_label}-C{idx}"
+
+        # Context block shown to agents
+        context_parts.append(
+            f"[{chunk_id}] Chunk from page {page}:\n{text}"
         )
 
-        # Format chunk with index and page number
-        chunk_header = f"Chunk {idx} (page={page_num}):"
-        chunk_content = doc.page_content.strip()
+        # Citation metadata returned to frontend
+        citations[chunk_id] = {
+            "page": page,
+            "page_label": page_label,
+            "source": source,
+            "snippet": (text[:150] + "...") if len(text) > 150 else text,
+            "text": text,
+        }
 
-        context_parts.append(f"{chunk_header}\n{chunk_content}")
-
-    return "\n\n".join(context_parts)
+    return "\n\n".join(context_parts), citations

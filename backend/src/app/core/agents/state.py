@@ -1,14 +1,11 @@
 """LangGraph state schema for the multi-agent QA flow."""
 
-from typing import Any, Dict, List, TypedDict
+from typing import Dict, TypedDict
 
 
-class QAState(TypedDict, total=False):
-    """State schema for the linear multi-agent QA flow."""
+class QAState(TypedDict):
     question: str
     context: str | None
+    citations: Dict[str, dict] | None
     draft_answer: str | None
     answer: str | None
-
-    # New: sources extracted from retrieval tool artifacts
-    sources: List[Dict[str, Any]] | None

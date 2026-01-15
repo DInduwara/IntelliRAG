@@ -7,11 +7,6 @@ class QuestionRequest(BaseModel):
     question: str
 
 
-class SourceItem(BaseModel):
-    text: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
 class QAResponse(BaseModel):
     """Response body for the `/qa` endpoint.
 
@@ -22,4 +17,4 @@ class QAResponse(BaseModel):
     """
     answer: str
     context: str
-    sources: Optional[List[SourceItem]] = None
+    citations: Optional[Dict[str, dict]] = None

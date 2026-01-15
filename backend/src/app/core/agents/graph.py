@@ -36,9 +36,9 @@ def run_qa_flow(question: str) -> Dict[str, Any]:
     initial_state: QAState = {
         "question": question,
         "context": None,
+        "citations": None,
         "draft_answer": None,
         "answer": None,
-        "sources": None,
     }
 
     final_state = graph.invoke(initial_state)
