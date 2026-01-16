@@ -238,7 +238,12 @@ export default function Page() {
                       t.type === "text" ? (
                         <span key={i}>{t.value}</span>
                       ) : (
-                        <CitationTag key={`${t.id}-${i}`} id={t.id} onClick={jumpToEvidence} />
+                        <CitationTag
+                          key={`${t.id}-${i}`}
+                          id={t.id}
+                          citations={citations}
+                          onClick={jumpToEvidence}
+                        />
                       )
                     )}
                   </div>
