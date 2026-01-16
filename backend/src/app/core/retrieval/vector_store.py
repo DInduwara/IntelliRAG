@@ -1,7 +1,9 @@
 """Vector store wrapper for Pinecone integration with LangChain."""
 
+from __future__ import annotations
+
 from functools import lru_cache
-from typing import List
+from typing import List, Optional
 
 from pinecone import Pinecone
 from pinecone.exceptions import PineconeApiException
@@ -55,17 +57,42 @@ def _get_vector_store() -> PineconeVectorStore:
     return PineconeVectorStore(index=index, embedding=embeddings)
 
 
-def get_retriever(k: int | None = None):
+def get_retriever(
+    k: int | None = None,
+    search_type: str = "similarity",
+    fetch_k: Optional[int] = None,
+    lambda_mult: Optional[float] = None,
+):
+    """
+    search_type:
+      - "similarity" (default)
+      - "mmr" (diversity-aware; can reduce repetitive chunks)
+
+    fetch_k and lambda_mult apply mainly to MMR.
+    """
     settings = get_settings()
     if k is None:
         k = settings.retrieval_k
 
     vector_store = _get_vector_store()
-    return vector_store.as_retriever(search_kwargs={"k": k})
+
+    search_kwargs = {"k": k}
+    if fetch_k is not None:
+        search_kwargs["fetch_k"] = fetch_k
+    if lambda_mult is not None:
+        search_kwargs["lambda_mult"] = lambda_mult
+
+    return vector_store.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
 
-def retrieve(query: str, k: int | None = None) -> List[Document]:
-    retriever = get_retriever(k=k)
+def retrieve(
+    query: str,
+    k: int | None = None,
+    search_type: str = "similarity",
+    fetch_k: Optional[int] = None,
+    lambda_mult: Optional[float] = None,
+) -> List[Document]:
+    retriever = get_retriever(k=k, search_type=search_type, fetch_k=fetch_k, lambda_mult=lambda_mult)
     return retriever.invoke(query)
 
 
