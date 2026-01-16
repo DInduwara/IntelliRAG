@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "IntelliRAG",
-  description: "Multi-Agent RAG demo UI",
+  description: "Multi-Agent RAG",
 };
 
 export default function RootLayout({

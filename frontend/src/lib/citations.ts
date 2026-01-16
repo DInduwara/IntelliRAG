@@ -1,42 +1,61 @@
+/**
+ * Helpers for working with citation tokens in answer strings.
+ * Tokens must be formatted in square brackets, e.g.:
+ * - [C1]
+ * - [P7-C1]
+ * - [P7-C12]
+ *
+ * This module:
+ * - extracts citation ids
+ * - tokenizes answer to render citations as interactive elements
+ */
+
 export type AnswerToken =
   | { type: "text"; value: string }
-  | { type: "cite"; id: string; raw: string };
+  | { type: "citation"; id: string };
 
-const CITE_RE = /\[([^\[\]\n]{1,40})\]/g;
-
-export function tokenizeAnswer(answer: string): AnswerToken[] {
-  const out: AnswerToken[] = [];
-  const s = answer ?? "";
-  let last = 0;
-
-  for (;;) {
-    const m = CITE_RE.exec(s);
-    if (!m) break;
-
-    const start = m.index;
-    const end = start + m[0].length;
-
-    if (start > last) {
-      out.push({ type: "text", value: s.slice(last, start) });
-    }
-
-    const id = m[1].trim();
-    out.push({ type: "cite", id, raw: m[0] });
-
-    last = end;
-  }
-
-  if (last < s.length) out.push({ type: "text", value: s.slice(last) });
-
-  return out;
-}
-
+/**
+ * Extract citation IDs in the order they appear (deduplicated).
+ */
 export function extractCitationIds(answer: string): string[] {
+  const re = /\[([^\[\]\n]{1,40})\]/g;
   const ids: string[] = [];
   let m: RegExpExecArray | null;
 
-  while ((m = CITE_RE.exec(answer ?? "")) !== null) {
-    ids.push(m[1].trim());
+  while ((m = re.exec(answer)) !== null) {
+    ids.push(m[1]);
   }
+
+  // Deduplicate while preserving order
   return Array.from(new Set(ids));
+}
+
+/**
+ * Split answer into text and citation tokens.
+ * This allows rendering clickable citation chips inside the answer.
+ */
+export function tokenizeAnswer(answer: string): AnswerToken[] {
+  const re = /\[([^\[\]\n]{1,40})\]/g;
+  const out: AnswerToken[] = [];
+
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(answer)) !== null) {
+    const start = m.index;
+    const end = re.lastIndex;
+
+    if (start > lastIndex) {
+      out.push({ type: "text", value: answer.slice(lastIndex, start) });
+    }
+
+    out.push({ type: "citation", id: m[1] });
+    lastIndex = end;
+  }
+
+  if (lastIndex < answer.length) {
+    out.push({ type: "text", value: answer.slice(lastIndex) });
+  }
+
+  return out;
 }

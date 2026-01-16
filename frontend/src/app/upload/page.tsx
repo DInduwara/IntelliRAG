@@ -44,7 +44,6 @@ export default function UploadPage() {
       <Card>
         <CardHeader
           title="Index a PDF"
-          subtitle="This calls POST /index-pdf on your FastAPI backend."
         />
         <CardBody>
           <FileDropzone onFile={onFile} />

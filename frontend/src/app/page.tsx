@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * Ask page
+ * - Calls POST /qa
+ * - Renders answer with inline citation tokens (clickable)
+ * - Renders evidence panel from `citations` map
+ * - Shows confidence signal returned by backend
+ *
+ * Notes:
+ * - This page assumes the backend returns: { answer, context, citations?, confidence? }
+ * - Citations in the answer must be formatted like: [P7-C1] or similar.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { askQuestion } from "@/lib/api";
 import type { QAResponse, CitationsMap } from "@/lib/types";
@@ -9,18 +21,29 @@ import { Spinner } from "@/components/Spinner";
 import { CitationTag } from "@/components/CitationTag";
 import { extractCitationIds, tokenizeAnswer } from "@/lib/citations";
 
+/**
+ * Prefer page_label for user-facing display because PDF labels are often 1-based,
+ * whereas internal `page` could be 0-based depending on the loader.
+ */
 function formatPageLabel(item?: { page?: string | number; page_label?: string | number }) {
   if (!item) return "unknown";
   const pl = item.page_label ?? item.page;
   return pl === undefined || pl === null || pl === "" ? "unknown" : String(pl);
 }
 
+/**
+ * Show a readable filename even if the backend provides a full path.
+ */
 function formatSource(source?: string) {
   if (!source) return "unknown";
   const parts = source.split(/[/\\]/);
   return parts[parts.length - 1] || source;
 }
 
+/**
+ * Generate stable DOM id for evidence sections.
+ * encodeURIComponent prevents broken IDs when citations include special characters.
+ */
 function evidenceElementId(citationId: string) {
   return `evidence-${encodeURIComponent(citationId)}`;
 }
@@ -32,19 +55,24 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<QAResponse | null>(null);
 
+  // Debugging toggles
   const [showContext, setShowContext] = useState(false);
+
+  // Evidence display preference
   const [showOnlyCited, setShowOnlyCited] = useState(true);
 
+  // Evidence highlight control after jump
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const highlightTimer = useRef<number | null>(null);
 
-  const canAsk = useMemo(
-    () => question.trim().length > 2 && !loading,
-    [question, loading]
-  );
+  const canAsk = useMemo(() => question.trim().length > 2 && !loading, [question, loading]);
 
   const citations: CitationsMap = data?.citations ?? {};
 
+  /**
+   * Extract citation IDs referenced in the answer text.
+   * These IDs should exist in `citations` map if the backend is consistent.
+   */
   const citationIds = useMemo(() => {
     if (!data?.answer) return [];
     return extractCitationIds(data.answer);
@@ -52,6 +80,10 @@ export default function Page() {
 
   const citedSet = useMemo(() => new Set(citationIds), [citationIds]);
 
+  /**
+   * Evidence entries shown in the UI.
+   * Default: show only evidence that is actually cited in the answer.
+   */
   const evidenceEntries = useMemo(() => {
     const entries = Object.entries(citations);
     if (!entries.length) return [];
@@ -59,15 +91,18 @@ export default function Page() {
     return entries.filter(([id]) => citedSet.has(id));
   }, [citations, showOnlyCited, citedSet]);
 
+  /**
+   * Scroll to evidence card and briefly highlight it.
+   */
   function jumpToEvidence(id: string) {
     const el = document.getElementById(evidenceElementId(id));
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!el) return;
 
-      setHighlightId(id);
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-      highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1200);
-    }
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    setHighlightId(id);
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1200);
   }
 
   useEffect(() => {
@@ -85,10 +120,11 @@ export default function Page() {
     try {
       setLoading(true);
       setAsking(true);
+
       const res = await askQuestion({ question: question.trim() });
       setData(res);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      const msg = e instanceof Error ? e.message : "Request failed.";
       setError(msg);
     } finally {
       setAsking(false);
@@ -98,9 +134,16 @@ export default function Page() {
 
   const hasAnswer = Boolean(data?.answer);
   const hasCitations = Boolean(data?.citations && Object.keys(data.citations).length);
+
   const filteredCount = evidenceEntries.length;
   const totalCount = hasCitations ? Object.keys(citations).length : 0;
 
+  /**
+   * Confidence is computed in the backend using citation coverage.
+   * - high: multiple valid citations used
+   * - medium: one valid citation used
+   * - low: no valid citations used
+   */
   const confidence = data?.confidence ?? "low";
   const confidenceTone =
     confidence === "high"
@@ -115,19 +158,17 @@ export default function Page() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Ask IntelliRAG</h1>
           <p className="mt-2 text-zinc-300/80">
-            Ask questions after indexing your PDF. Citations in the answer are clickable.
+            Ask questions after indexing your PDF. Citations are interactive and map to chunk-level evidence.
           </p>
-        </div>
-        <div className="hidden sm:block text-xs text-zinc-400">
-          Backend: <span className="text-zinc-200 font-semibold">/qa</span>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="lg:sticky lg:top-[84px] lg:self-start">
+        {/* Left column: question, controls, summary */}
+        <Card className="lg:sticky lg:top-21 lg:self-start">
           <CardHeader
             title="Question"
-            subtitle="Type a question and submit. Make sure your backend is running."
+            subtitle="Submit a question. Ensure the FastAPI backend is running and reachable."
             right={
               <Button onClick={onAsk} disabled={!canAsk}>
                 {asking ? "Asking..." : "Ask"}
@@ -138,15 +179,14 @@ export default function Page() {
             <textarea
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g., What are the main indexing strategies in vector databases?"
-              className="min-h-[160px] w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/40 p-4 text-sm
+              placeholder="Example: What indexing strategies are described for vector databases?"
+              className="min-h-40 w-full resize-none rounded-2xl border border-white/10 bg-zinc-950/40 p-4 text-sm
                          placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white/20"
             />
 
             <div className="mt-4 flex items-center justify-between gap-3">
               <div className="text-xs text-zinc-400">
-                Tip: Index a PDF first in{" "}
-                <span className="font-semibold text-zinc-200">Upload PDF</span>.
+                Tip: Index a PDF first in <span className="font-semibold text-zinc-200">Upload PDF</span>.
               </div>
               {asking ? <Spinner label="Calling /qa..." /> : null}
             </div>
@@ -161,16 +201,19 @@ export default function Page() {
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-xs text-zinc-400">Citations detected</div>
+                    <div className="text-xs text-zinc-400">Citations referenced in answer</div>
                     <div className="mt-1 text-xs text-zinc-500">
                       {citationIds.length
-                        ? `${citationIds.length} citation(s) found in the answer text.`
-                        : "No citations found in answer text."}
+                        ? `${citationIds.length} citation token(s) found in the answer text.`
+                        : "No citation tokens found in the answer text."}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className={`rounded-xl border px-3 py-1 text-xs font-semibold ${confidenceTone}`}>
+                    <div
+                      className={`rounded-xl border px-3 py-1 text-xs font-semibold ${confidenceTone}`}
+                      title="Confidence is computed from valid citation coverage in the final answer."
+                    >
                       Confidence: {confidence}
                     </div>
 
@@ -194,14 +237,14 @@ export default function Page() {
                         type="button"
                         onClick={() => jumpToEvidence(id)}
                         className="rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-1 text-xs font-semibold text-zinc-200 hover:bg-white/10"
-                        title="Jump to evidence"
+                        title="Jump to evidence card"
                       >
                         [{id}]
                       </button>
                     ))
                   ) : (
                     <div className="text-xs text-zinc-400">
-                      If none appear, your indexed PDF probably does not contain the answer.
+                      If no citations appear, the document may not contain the answer or the prompt rules are not being followed.
                     </div>
                   )}
                 </div>
@@ -214,11 +257,11 @@ export default function Page() {
                   >
                     {showContext ? "Hide raw context" : "Show raw context"}
                   </button>
-                  <span className="text-xs text-zinc-500">for debugging</span>
+                  <span className="text-xs text-zinc-500">debugging only</span>
                 </div>
 
                 {showContext ? (
-                  <pre className="mt-3 max-h-[240px] overflow-auto rounded-2xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-zinc-200/90 whitespace-pre-wrap">
+                  <pre className="mt-3 max-h-60 overflow-auto rounded-2xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-zinc-200/90 whitespace-pre-wrap">
                     {data?.context}
                   </pre>
                 ) : null}
@@ -227,9 +270,10 @@ export default function Page() {
           </CardBody>
         </Card>
 
+        {/* Right column: answer + evidence */}
         <div className="grid gap-6">
           <Card>
-            <CardHeader title="Answer" subtitle="Click citations to jump to evidence." />
+            <CardHeader title="Generated answer" subtitle="Citations are clickable and linked to evidence." />
             <CardBody>
               {hasAnswer ? (
                 <div className="prose prose-invert max-w-none">
@@ -249,9 +293,7 @@ export default function Page() {
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-zinc-400">
-                  No answer yet. Ask a question to see results here.
-                </div>
+                <div className="text-sm text-zinc-400">No answer yet. Submit a question to see results.</div>
               )}
             </CardBody>
           </Card>
@@ -259,13 +301,11 @@ export default function Page() {
           <Card>
             <CardHeader
               title="Evidence"
-              subtitle="Citations map returned by the backend (chunk_id → page/source/snippet)."
+              subtitle="Chunk citations"
               right={
                 hasCitations ? (
                   <div className="text-xs text-zinc-400">
-                    Showing{" "}
-                    <span className="text-zinc-200 font-semibold">{filteredCount}</span>{" "}
-                    /{" "}
+                    Showing <span className="text-zinc-200 font-semibold">{filteredCount}</span> /{" "}
                     <span className="text-zinc-200 font-semibold">{totalCount}</span>
                   </div>
                 ) : null
@@ -303,13 +343,8 @@ export default function Page() {
 
                           <div className="text-xs text-zinc-400">
                             Page{" "}
-                            <span className="text-zinc-200 font-semibold">
-                              {formatPageLabel(meta)}
-                            </span>{" "}
-                            •{" "}
-                            <span className="text-zinc-200 font-semibold">
-                              {formatSource(meta.source)}
-                            </span>
+                            <span className="text-zinc-200 font-semibold">{formatPageLabel(meta)}</span> •{" "}
+                            <span className="text-zinc-200 font-semibold">{formatSource(meta.source)}</span>
                           </div>
                         </div>
 
@@ -319,9 +354,9 @@ export default function Page() {
 
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <div className="text-xs text-zinc-500">
-                            Source:{" "}
-                            <span className="text-zinc-300">{formatSource(meta.source)}</span>
+                            Source: <span className="text-zinc-300">{formatSource(meta.source)}</span>
                           </div>
+
                           <button
                             type="button"
                             className="text-xs font-semibold text-zinc-200 hover:underline"
