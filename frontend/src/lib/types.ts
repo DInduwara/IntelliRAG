@@ -1,3 +1,8 @@
+/**
+ * Shared API types for the frontend.
+ * Keep these aligned with FastAPI response models.
+ */
+
 export type CitationItem = {
   page?: number | string;
   page_label?: string | number;
@@ -12,8 +17,14 @@ export type QAResponse = {
   context: string;
   citations?: CitationsMap;
 
+  /**
+   * Confidence signal returned by the backend.
+   * Intended meaning:
+   * - high: multiple valid citations exist in final answer
+   * - medium: one valid citation exists in final answer
+   * - low: no valid citations exist in final answer
+   */
   confidence?: "high" | "medium" | "low";
-
 };
 
 export type IndexPdfResponse = {

@@ -2,6 +2,13 @@
 @import "tailwindcss/theme";
 @import "tailwindcss/utilities";
 
+/*
+  Global styling:
+  - dark color scheme
+  - smooth scroll for evidence jumps
+  - high readability background
+*/
+
 :root {
   color-scheme: dark;
 }
@@ -11,14 +18,13 @@ body {
   height: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: #09090b;
   color: #fafafa;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-/* Optional: smooth anchor scrolling */
-html {
-  scroll-behavior: smooth;
 }
