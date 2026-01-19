@@ -3,5 +3,5 @@ export function getApiBaseUrl(): string {
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL;
 
-  return url?.trim() ? url.trim() : "http://127.0.0.1:8000";
+  return url?.trim() ? url.trim() : "intelirag-esbubgbadjfgcrbb.southeastasia-01.azurewebsites.net";
 }
