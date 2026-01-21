@@ -21,7 +21,12 @@ export default function UploadPage() {
 
     try {
       setLoading(true);
+
       const res = await indexPdf(file);
+
+      // Save last uploaded filename for document-scoped retrieval
+      window.localStorage.setItem("intelirag:lastUploadedPdf", file.name);
+
       setStatus(res.message ?? res.status ?? "Indexed successfully");
       setChunks(typeof res.chunks_indexed === "number" ? res.chunks_indexed : null);
     } catch (e: unknown) {
@@ -37,14 +42,13 @@ export default function UploadPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Upload PDF</h1>
         <p className="mt-2 text-zinc-300/80">
-          Upload a PDF to index into Pinecone. After indexing, go back to <span className="font-semibold text-zinc-200">Ask</span>.
+          Upload a PDF to index into Pinecone. After indexing, go back to{" "}
+          <span className="font-semibold text-zinc-200">Ask</span>.
         </p>
       </div>
 
       <Card>
-        <CardHeader
-          title="Index a PDF"
-        />
+        <CardHeader title="Index a PDF" />
         <CardBody>
           <FileDropzone onFile={onFile} />
 

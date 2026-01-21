@@ -1,6 +1,6 @@
 /**
  * Shared API types for the frontend.
- * Keep these aligned with FastAPI response models.
+ * Keep these aligned with FastAPI request/response models.
  */
 
 export type CitationItem = {
@@ -8,6 +8,9 @@ export type CitationItem = {
   page_label?: string | number;
   source?: string;
   snippet?: string;
+
+  // optional full text if backend includes it
+  text?: string;
 };
 
 export type CitationsMap = Record<string, CitationItem>;
@@ -16,14 +19,6 @@ export type QAResponse = {
   answer: string;
   context: string;
   citations?: CitationsMap;
-
-  /**
-   * Confidence signal returned by the backend.
-   * Intended meaning:
-   * - high: multiple valid citations exist in final answer
-   * - medium: one valid citation exists in final answer
-   * - low: no valid citations exist in final answer
-   */
   confidence?: "high" | "medium" | "low";
 };
 
@@ -36,4 +31,10 @@ export type IndexPdfResponse = {
 
 export type QARequest = {
   question: string;
+
+  /**
+   * If provided, restrict retrieval to this document source name.
+   * If null/undefined, backend will search across all indexed PDFs.
+   */
+  document_scope?: string | null;
 };

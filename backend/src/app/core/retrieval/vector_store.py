@@ -1,9 +1,19 @@
-"""Vector store wrapper for Pinecone integration with LangChain."""
+"""Vector store wrapper for Pinecone integration with LangChain.
+
+This module centralizes:
+- Pinecone client setup
+- Embedding model setup
+- Retriever construction
+- Retrieval + optional metadata filtering (document-scoped retrieval)
+
+Option C feature:
+- Support retrieval scoped to a single PDF by filtering on metadata["source"].
+"""
 
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from pinecone import Pinecone
 from pinecone.exceptions import PineconeApiException
@@ -36,6 +46,13 @@ def _extract_index_dimension(pc: Pinecone, index_name: str) -> int | None:
 
 @lru_cache(maxsize=1)
 def _get_vector_store() -> PineconeVectorStore:
+    """
+    Create and cache a PineconeVectorStore instance.
+
+    Why cache?
+    - Avoid re-initializing Pinecone + embeddings on every request.
+    - Reduces latency and improves stability under load.
+    """
     settings = get_settings()
 
     pc = Pinecone(api_key=settings.pinecone_api_key)
@@ -62,13 +79,26 @@ def get_retriever(
     search_type: str = "similarity",
     fetch_k: Optional[int] = None,
     lambda_mult: Optional[float] = None,
+    *,
+    document_scope: str | None = None,
 ):
     """
-    search_type:
-      - "similarity" (default)
-      - "mmr" (diversity-aware; can reduce repetitive chunks)
+    Build a retriever with optional document-level filtering.
 
-    fetch_k and lambda_mult apply mainly to MMR.
+    Args:
+        k:
+            Number of final results returned.
+        search_type:
+            "similarity" (default) or "mmr" (diversity-aware).
+        fetch_k:
+            Used mainly for MMR. Controls candidate pool size.
+        lambda_mult:
+            Used mainly for MMR. Controls diversity vs relevance.
+        document_scope:
+            If provided, restrict retrieval to a single PDF (metadata["source"] == document_scope).
+
+    Returns:
+        LangChain retriever instance.
     """
     settings = get_settings()
     if k is None:
@@ -76,11 +106,20 @@ def get_retriever(
 
     vector_store = _get_vector_store()
 
-    search_kwargs = {"k": k}
+    search_kwargs: Dict[str, Any] = {"k": k}
+
+    # Optional MMR tuning
     if fetch_k is not None:
         search_kwargs["fetch_k"] = fetch_k
     if lambda_mult is not None:
         search_kwargs["lambda_mult"] = lambda_mult
+
+    # Notes:
+    # - Pinecone filter works only if vectors were indexed with metadata including "source"
+    # - In your pipeline, PyPDFLoader sets metadata["source"] to the file path/name.
+    # - We keep it consistent by passing `document_scope` as a filename.
+    if document_scope:
+        search_kwargs["filter"] = {"source": document_scope}
 
     return vector_store.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
@@ -91,13 +130,29 @@ def retrieve(
     search_type: str = "similarity",
     fetch_k: Optional[int] = None,
     lambda_mult: Optional[float] = None,
+    *,
+    document_scope: str | None = None,
 ) -> List[Document]:
-    retriever = get_retriever(k=k, search_type=search_type, fetch_k=fetch_k, lambda_mult=lambda_mult)
+    """
+    Perform retrieval for a query with optional document filtering.
+    """
+    retriever = get_retriever(
+        k=k,
+        search_type=search_type,
+        fetch_k=fetch_k,
+        lambda_mult=lambda_mult,
+        document_scope=document_scope,
+    )
     return retriever.invoke(query)
 
 
 def index_documents(docs: List[Document]) -> int:
-    """Index a list of Document objects into Pinecone."""
+    """Index a list of Document objects into Pinecone.
+
+    Important:
+    - We rely on doc.metadata["source"] for document-scoped retrieval.
+    - Ensure the loader produces "source" metadata. (PyPDFLoader does.)
+    """
     if not docs:
         return 0
 

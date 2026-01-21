@@ -12,6 +12,13 @@ from ..retrieval.vector_store import retrieve
 
 
 def _doc_dedupe_key(doc: Document) -> str:
+    """
+    Create a deterministic key for a document chunk to remove duplicates.
+
+    Why:
+    - Splitters often create overlapping chunks
+    - Retrieval may return repeated chunks across queries
+    """
     md = doc.metadata or {}
     source = str(md.get("source", "unknown"))
     page_label = str(md.get("page_label", md.get("page", "unknown")))
@@ -23,6 +30,7 @@ def _doc_dedupe_key(doc: Document) -> str:
 
 
 def _dedupe_docs(docs: List[Document]) -> List[Document]:
+    """Remove exact duplicates based on _doc_dedupe_key."""
     seen = set()
     out: List[Document] = []
     for d in docs:
@@ -39,11 +47,19 @@ def retrieval_tool(query: str):
     """
     Retrieve relevant document chunks with citation IDs.
 
+    Args:
+        query:
+            The user's question (or sub-question).
+        document_scope:
+            If provided, restrict retrieval to chunks where metadata["source"] == document_scope.
+            This prevents citations from older PDFs.
+
     Returns:
-        content: citation-aware context string
-        artifact: citation map (chunk_id -> metadata)
+        content:
+            Citation-aware context string.
+        artifact:
+            Citation map (chunk_id -> metadata).
     """
-    # Retrieve more than we finally show, so we can dedupe and keep best variety
     fetch_k = 12
     top_n = 6
 

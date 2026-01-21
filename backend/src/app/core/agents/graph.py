@@ -90,7 +90,16 @@ def get_qa_graph() -> Any:
     return create_qa_graph()
 
 
-def run_qa_flow(question: str) -> QAState:
+def run_qa_flow(question: str, document_scope: str | None = None) -> QAState:
+    """
+    Run LangGraph QA flow with optional document scoping.
+
+    Args:
+        question:
+            User question.
+        document_scope:
+            If provided, retrieval is restricted to this specific PDF source.
+    """
     graph = get_qa_graph()
 
     initial_state: QAState = {
@@ -100,6 +109,7 @@ def run_qa_flow(question: str) -> QAState:
         "draft_answer": None,
         "answer": None,
         "confidence": "low",
+        "document_scope": document_scope,
     }
 
     final_state: QAState = graph.invoke(initial_state)
@@ -109,8 +119,6 @@ def run_qa_flow(question: str) -> QAState:
 
     answer = (final_state.get("answer") or "").strip()
 
-    # Only do cleaning if we actually have allowed IDs
-    # (If no citations returned, do not “delete” citations and confuse debugging.)
     if allowed_ids:
         answer = _remove_unknown_citations(answer, allowed_ids)
         answer = _dedupe_and_limit_per_sentence(answer, max_per_sentence=2)
