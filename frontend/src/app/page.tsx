@@ -28,7 +28,6 @@ function evidenceElementId(citationId: string) {
 export default function Page() {
   const [question, setQuestion] = useState("");
 
-  // Option C UI: last uploaded file + scope toggle
   const [lastUploaded, setLastUploaded] = useState<string | null>(null);
   const [scopeMode, setScopeMode] = useState<"all" | "selected">("all");
 
@@ -157,7 +156,7 @@ export default function Page() {
             }
           />
           <CardBody>
-            {/*control */}
+            {/*  control */}
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="text-xs text-zinc-400">Scope:</span>
 

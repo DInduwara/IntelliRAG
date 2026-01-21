@@ -1,8 +1,10 @@
-"""Tools available to agents in the multi-agent RAG system."""
+"""Tools available to agents in the multi-agent RAG system.
+- retrieval_tool now supports document-scoped retrieval via `document_scope`.
+"""
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import List, Optional
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -23,9 +25,6 @@ def _doc_dedupe_key(doc: Document) -> str:
     source = str(md.get("source", "unknown"))
     page_label = str(md.get("page_label", md.get("page", "unknown")))
     text = (doc.page_content or "").strip()
-
-    # A simple deterministic key (good enough for dedupe)
-    # If two chunks are identical in these fields, we treat them as duplicates.
     return f"{source}||{page_label}||{text}"
 
 
@@ -43,7 +42,7 @@ def _dedupe_docs(docs: List[Document]) -> List[Document]:
 
 
 @tool(response_format="content_and_artifact")
-def retrieval_tool(query: str):
+def retrieval_tool(query: str, document_scope: Optional[str] = None):
     """
     Retrieve relevant document chunks with citation IDs.
 
@@ -63,14 +62,10 @@ def retrieval_tool(query: str):
     fetch_k = 12
     top_n = 6
 
-    docs = retrieve(query, k=fetch_k)
+    docs = retrieve(query, k=fetch_k, document_scope=document_scope)
 
-    # Remove identical/duplicate chunks (often happens across overlapping splits)
     docs = _dedupe_docs(docs)
-
-    # Keep only top_n after dedupe (preserves original ordering from retriever)
     docs = docs[:top_n]
 
     context, citations = serialize_chunks_with_ids(docs)
-
     return context, citations

@@ -14,4 +14,3 @@ class QAState(TypedDict):
     answer: str | None
     document_scope: NotRequired[str | None]
     confidence: NotRequired[str]
-    
