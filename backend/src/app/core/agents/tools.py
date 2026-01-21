@@ -1,6 +1,4 @@
 """Tools available to agents in the multi-agent RAG system.
-
-Option C feature:
 - retrieval_tool now supports document-scoped retrieval via `document_scope`.
 """
 

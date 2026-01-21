@@ -19,7 +19,7 @@ except Exception:
 
 
 app = FastAPI(
-    title="IntelliRAG Backend API",
+    title="Class 12 Multi-Agent RAG Demo",
     description="Demo API for asking questions + indexing PDFs.",
     version="0.1.0",
 )
@@ -39,12 +39,6 @@ async def validate_config() -> None:
 
     if missing:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
-
-    print("Config loaded")
-    print(f"OpenAI chat model: {s.openai_model_name}")
-    print(f"OpenAI embedding model: {s.openai_embedding_model_name}")
-    print(f"Pinecone index: {s.pinecone_index_name}")
-    print(f"Frontend origin: {s.frontend_origin}")
 
 
 settings = get_settings()
@@ -83,16 +77,11 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
             detail="`question` must be a non-empty string.",
         )
 
+    # document_scope is optional (None = global search)
     result = answer_question(question, document_scope=payload.document_scope)
 
     citations = result.get("citations") or None
     confidence = result.get("confidence", "low")
-
-    # (optional dev log)
-    if citations:
-        print(f"/qa citations returned: {len(citations)}")
-    else:
-        print(f"/qa citations returned: 0 (confidence={confidence})")
 
     return QAResponse(
         answer=result.get("answer", "") or "",

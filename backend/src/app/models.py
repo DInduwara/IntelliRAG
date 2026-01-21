@@ -19,6 +19,4 @@ class QAResponse(BaseModel):
     answer: str
     context: str
     citations: Optional[Dict[str, dict]] = None
-    
-    # confidence signal
     confidence: str = "low"
