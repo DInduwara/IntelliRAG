@@ -5,6 +5,7 @@ from pydantic import BaseModel
 class QuestionRequest(BaseModel):
     """Request body for the `/qa` endpoint."""
     question: str
+    document_scope: Optional[str] = None
 
 
 class QAResponse(BaseModel):

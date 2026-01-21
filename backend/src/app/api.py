@@ -19,7 +19,7 @@ except Exception:
 
 
 app = FastAPI(
-    title="Class 12 Multi-Agent RAG Demo",
+    title="IntelliRAG Backend API",
     description="Demo API for asking questions + indexing PDFs.",
     version="0.1.0",
 )
@@ -83,7 +83,7 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
             detail="`question` must be a non-empty string.",
         )
 
-    result = answer_question(question)
+    result = answer_question(question, document_scope=payload.document_scope)
 
     citations = result.get("citations") or None
     confidence = result.get("confidence", "low")
