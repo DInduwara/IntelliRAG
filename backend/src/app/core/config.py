@@ -1,4 +1,5 @@
-"""Configuration management for the multi-agent RAG system.
+"""
+Configuration management for the multi-agent RAG system.
 
 Loads and validates environment variables for OpenAI models, Pinecone settings,
 and retrieval parameters using Pydantic Settings.
@@ -24,6 +25,10 @@ class Settings(BaseSettings):
 
     # Frontend / CORS
     frontend_origin: str = "http://localhost:3000"
+
+    # Admin / Maintenance
+    # This will protect endpoints like "clear all documents"
+    admin_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

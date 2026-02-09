@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { indexPdf } from "@/lib/api";
+import { indexPdf, adminClearAll } from "@/lib/api";
 import { Card, CardBody, CardHeader } from "@/components/Card";
 import { Spinner } from "@/components/Spinner";
 import { FileDropzone } from "@/components/FileDropzone";
@@ -37,52 +37,95 @@ export default function UploadPage() {
     }
   }
 
+  async function onClearAll() {
+    const key = window.prompt("Enter ADMIN key to CLEAR all documents (uploads + Pinecone vectors):");
+    if (!key) return;
+
+    setError(null);
+    setStatus(null);
+    setChunks(null);
+
+    try {
+      setLoading(true);
+
+      const res = await adminClearAll(key);
+
+      // Clear selected doc memory
+      window.localStorage.removeItem("intelirag:lastUploadedPdf");
+      setFileName(null);
+
+      setStatus(res.message ?? "Cleared successfully");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Clear failed.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Upload PDF</h1>
-        <p className="mt-2 text-zinc-300/80">
-          Upload a PDF to index into Pinecone. After indexing, go back to{" "}
-          <span className="font-semibold text-zinc-200">Ask</span>.
-        </p>
-      </div>
+      <div className="grid gap-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Upload PDF</h1>
+          <p className="mt-2 text-zinc-300/80">
+            Upload a PDF to index into Pinecone. After indexing, go back to{" "}
+            <span className="font-semibold text-zinc-200">Ask</span>.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader title="Index a PDF" />
-        <CardBody>
-          <FileDropzone onFile={onFile} />
+        <Card>
+          <CardHeader title="Index a PDF" />
+          <CardBody>
+            <FileDropzone onFile={onFile} />
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="text-xs text-zinc-400">
-              {fileName ? (
-                <>
-                  Selected: <span className="text-zinc-200 font-semibold">{fileName}</span>
-                </>
-              ) : (
-                "No file selected."
-              )}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="text-xs text-zinc-400">
+                {fileName ? (
+                    <>
+                      Selected: <span className="text-zinc-200 font-semibold">{fileName}</span>
+                    </>
+                ) : (
+                    "No file selected."
+                )}
+              </div>
+              {loading ? <Spinner label="Uploading & indexing..." /> : null}
             </div>
-            {loading ? <Spinner label="Uploading & indexing..." /> : null}
-          </div>
 
-          {status ? (
-            <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-              <div className="font-semibold">{status}</div>
-              {chunks !== null ? (
-                <div className="mt-1 text-emerald-100/90">
-                  Chunks indexed: <span className="font-semibold">{chunks}</span>
+            {status ? (
+                <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                  <div className="font-semibold">{status}</div>
+                  {chunks !== null ? (
+                      <div className="mt-1 text-emerald-100/90">
+                        Chunks indexed: <span className="font-semibold">{chunks}</span>
+                      </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
 
-          {error ? (
-            <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
-              {error}
+            {error ? (
+                <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+                  {error}
+                </div>
+            ) : null}
+
+            {/*  Admin Clear Button */}
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <button
+                  type="button"
+                  onClick={onClearAll}
+                  disabled={loading}
+                  className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/15 disabled:opacity-60"
+                  title="Deletes all uploaded PDFs + clears Pinecone vectors"
+              >
+                Clear all documents (Admin)
+              </button>
+
+              <p className="text-xs text-zinc-500">
+                Deletes all uploaded PDFs and clears Pinecone index. Protected by admin key.
+              </p>
             </div>
-          ) : null}
-        </CardBody>
-      </Card>
-    </div>
+          </CardBody>
+        </Card>
+      </div>
   );
 }

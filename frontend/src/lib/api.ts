@@ -78,3 +78,14 @@ export async function indexPdf(file: File): Promise<IndexPdfResponse> {
     body: form,
   });
 }
+
+
+export async function adminClearAll(adminKey: string): Promise<{ message: string; deleted_files?: number }> {
+  return request<{ message: string; deleted_files?: number }>("/admin/clear", {
+    method: "DELETE",
+    headers: {
+      "X-ADMIN-KEY": adminKey,
+    },
+  });
+}
+

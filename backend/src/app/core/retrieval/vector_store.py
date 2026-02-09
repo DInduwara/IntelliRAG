@@ -166,3 +166,21 @@ def index_documents(docs: List[Document]) -> int:
         raise RuntimeError(f"Pinecone upsert failed: {e}") from e
 
     return len(chunks)
+
+def delete_all_vectors() -> None:
+    """
+    Deletes ALL vectors from the Pinecone index.
+    Use this when you want a fresh deploy with no previous document data.
+    """
+    settings = get_settings()
+
+    pc = Pinecone(api_key=settings.pinecone_api_key)
+    index = pc.Index(settings.pinecone_index_name)
+
+    try:
+        index.delete(delete_all=True)
+    except PineconeApiException as e:
+        raise RuntimeError(f"Pinecone delete_all failed: {e}") from e
+    except Exception as e:
+        raise RuntimeError(f"Pinecone delete_all failed: {e}") from e
+
