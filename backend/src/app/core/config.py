@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     retrieval_k: int = 4
 
     # Frontend / CORS
-    frontend_origin: str = "http://localhost:3000"
+    frontend_origin: str = "https://intelli-rag.vercel.app"
 
     # Admin / Maintenance
     # This will protect endpoints like "clear all documents"
