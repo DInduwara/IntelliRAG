@@ -115,10 +115,16 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
 
     citations = result.get("citations") or None
     confidence = result.get("confidence", "low")
+    
+    # Grab the planning data from the graph result
+    plan = result.get("plan")
+    sub_questions = result.get("sub_questions")
 
     return QAResponse(
         answer=result.get("answer", "") or "",
         context=result.get("context", "") or "",
+        plan=plan,
+        sub_questions=sub_questions,
         citations=citations,
         confidence=confidence,
     )

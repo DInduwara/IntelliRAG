@@ -3,11 +3,13 @@
 """
 
 from __future__ import annotations
-from typing import Dict, NotRequired, TypedDict
+from typing import Dict, List, NotRequired, TypedDict
 
 
 class QAState(TypedDict):
     question: str
+    plan: NotRequired[str | None]
+    sub_questions: NotRequired[List[str]]
     context: str | None
     citations: Dict[str, dict] | None
     draft_answer: str | None

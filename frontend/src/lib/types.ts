@@ -18,6 +18,8 @@ export type CitationsMap = Record<string, CitationItem>;
 export type QAResponse = {
   answer: string;
   context: string;
+  plan?: string;
+  sub_questions?: string[];
   citations?: CitationsMap;
   confidence?: "high" | "medium" | "low";
 };

@@ -8,6 +8,7 @@ import { Button } from "@/components/Button";
 import { Spinner } from "@/components/Spinner";
 import { CitationTag } from "@/components/CitationTag";
 import { extractCitationIds, tokenizeAnswer } from "@/lib/citations";
+import { QueryPlan } from "@/components/QueryPlan"; // <-- NEW IMPORT
 
 function formatPageLabel(item?: { page?: string | number; page_label?: string | number }) {
   if (!item) return "unknown";
@@ -121,6 +122,7 @@ export default function Page() {
 
   const hasAnswer = Boolean(data?.answer);
   const hasCitations = Boolean(data?.citations && Object.keys(data.citations).length);
+  const hasPlan = Boolean(data?.plan || (data?.sub_questions && data.sub_questions.length > 0)); // <-- NEW
 
   const filteredCount = evidenceEntries.length;
   const totalCount = hasCitations ? Object.keys(citations).length : 0;
@@ -156,7 +158,7 @@ export default function Page() {
             }
           />
           <CardBody>
-            {/*  control */}
+            {/* control */}
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="text-xs text-zinc-400">Scope:</span>
 
@@ -291,7 +293,14 @@ export default function Page() {
           </CardBody>
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid gap-6 lg:self-start">
+          
+          {/* --- NEW: RENDER THE PLAN IF IT EXISTS --- */}
+          {hasPlan ? (
+             <QueryPlan plan={data?.plan || ""} subQuestions={data?.sub_questions || []} />
+          ) : null}
+          {/* --------------------------------------- */}
+
           <Card>
             <CardHeader title="Generated answer" subtitle="Citations are clickable and linked to evidence." />
             <CardBody>
