@@ -18,5 +18,7 @@ class QAResponse(BaseModel):
     """
     answer: str
     context: str
+    plan: Optional[str] = None
+    sub_questions: Optional[List[str]] = None
     citations: Optional[Dict[str, dict]] = None
     confidence: str = "low"

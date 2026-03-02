@@ -7,7 +7,7 @@ import re
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
-from .agents import retrieval_node, summarization_node, verification_node
+from .agents import planning_node, retrieval_node, summarization_node, verification_node
 from .state import QAState
 
 
@@ -73,11 +73,15 @@ def _compute_confidence(answer: str, allowed_ids: set[str]) -> str:
 def create_qa_graph() -> Any:
     builder = StateGraph(QAState)
 
+    # 1. Register the NEW node
+    builder.add_node("planning", planning_node) 
     builder.add_node("retrieval", retrieval_node)
     builder.add_node("summarization", summarization_node)
     builder.add_node("verification", verification_node)
 
-    builder.add_edge(START, "retrieval")
+    # 2. Update the edges: START -> PLANNING -> RETRIEVAL
+    builder.add_edge(START, "planning") # Changed from START -> retrieval
+    builder.add_edge("planning", "retrieval")
     builder.add_edge("retrieval", "summarization")
     builder.add_edge("summarization", "verification")
     builder.add_edge("verification", END)
@@ -104,6 +108,8 @@ def run_qa_flow(question: str, document_scope: str | None = None) -> QAState:
 
     initial_state: QAState = {
         "question": question,
+        "plan": None,
+        "sub_questions": [],
         "context": None,
         "citations": None,
         "draft_answer": None,
