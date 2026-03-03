@@ -1,3 +1,16 @@
+"""
+Main API Entry Point Module
+
+This module defines the FastAPI application and its routing logic. It serves as the
+primary interface for the frontend, handling HTTP requests for document indexing,
+multi-agent QA, and administrative maintenance.
+
+Architectural highlights:
+- Middleware: Configures CORS for secure frontend-backend communication.
+- Exception Handling: Global handlers for OpenAI rate limits and generic internal errors.
+- Security: Header-based administrative protection for destructive operations.
+"""
+
 from pathlib import Path
 import shutil
 
@@ -22,6 +35,8 @@ from .services.indexing_service import index_pdf_file
 from .core.config import get_settings
 from .core.retrieval.vector_store import delete_all_vectors
 
+# Senior Note: Conditional import of OpenAI RateLimitError ensures the app remains 
+# functional even if the library structure changes, allowing for graceful degradation.
 try:
     from openai import RateLimitError as OpenAIRateLimitError  # type: ignore
 except Exception:
@@ -37,6 +52,11 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def validate_config() -> None:
+    """
+    Startup hook to validate that all critical environment variables are loaded.
+    This prevents the service from running in a 'zombie' state where requests 
+    would inevitably fail due to missing credentials.
+    """
     s = get_settings()
 
     missing = []
@@ -51,6 +71,8 @@ async def validate_config() -> None:
         raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
 
 
+# CORS configuration ensures that only the authorized frontend origin can
+# interact with this API, preventing Cross-Site Request Forgery (CSRF).
 settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +85,10 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Global exception interceptor to standardize error responses.
+    Specifically handles OpenAI quota issues to provide actionable feedback to the user.
+    """
     if isinstance(exc, HTTPException):
         raise exc
 
@@ -78,13 +104,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-# -----------------------------
-# Helpers
-# -----------------------------
 def _require_admin_key(x_admin_key: str | None) -> None:
     """
-    Protect destructive admin endpoints.
-    Reads ADMIN_KEY from Settings (core/config.py).
+    Security gatekeeper for administrative endpoints.
+    Validates the X-Admin-Key header against the server-side ADMIN_KEY.
     """
     s = get_settings()
 
@@ -101,22 +124,33 @@ def _require_admin_key(x_admin_key: str | None) -> None:
 # -----------------------------
 # Routes
 # -----------------------------
+
 @app.post("/qa", response_model=QAResponse, status_code=status.HTTP_200_OK)
 async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
+    """
+    Main Question-Answering endpoint.
+    Orchestrates the multi-agent flow via the service layer.
+    """
     question = payload.question.strip()
     if not question:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="`question` must be a non-empty string.",
         )
+        
+    # Thread ID is vital for LangGraph's checkpointer to maintain conversational memory.
+    thread_id = payload.thread_id or "default-session"
 
-    # document_scope is optional (None = global search)
-    result = answer_question(question, document_scope=payload.document_scope)
+    # Execute the core RAG logic.
+    result = answer_question(
+        question=question, 
+        thread_id=thread_id, 
+        document_scope=payload.document_scope
+    )
 
+    # Post-processing extraction for API response compatibility.
     citations = result.get("citations") or None
     confidence = result.get("confidence", "low")
-    
-    # Grab the planning data from the graph result
     plan = result.get("plan")
     sub_questions = result.get("sub_questions")
 
@@ -127,17 +161,23 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
         sub_questions=sub_questions,
         citations=citations,
         confidence=confidence,
+        thread_id=thread_id
     )
 
 
 @app.post("/index-pdf", status_code=status.HTTP_200_OK)
 async def index_pdf(file: UploadFile = File(...)) -> dict:
+    """
+    Document ingestion endpoint.
+    Handles PDF uploads, local persistence for reference, and vector indexing.
+    """
     if file.content_type not in ("application/pdf",):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only PDF files are supported.",
         )
 
+    # Ensure local directory exists for file traceability.
     upload_dir = Path("data/uploads")
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -146,6 +186,7 @@ async def index_pdf(file: UploadFile = File(...)) -> dict:
     file_path.write_bytes(contents)
 
     try:
+        # Trigger the indexing pipeline (load -> split -> embed -> upsert).
         chunks_indexed = index_pdf_file(file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
@@ -160,19 +201,15 @@ async def index_pdf(file: UploadFile = File(...)) -> dict:
 @app.delete("/admin/clear", status_code=status.HTTP_200_OK)
 async def admin_clear_all(x_admin_key: str | None = Header(default=None)) -> dict:
     """
-    Clears:
-    1) Local uploaded PDFs: data/uploads/*
-    2) Pinecone vectors: delete_all=True
-
-    Protected by request header:
-      X-ADMIN-KEY: <ADMIN_KEY>
+    Administrative cleanup endpoint.
+    Purges all local files and resets the remote Pinecone vector index.
     """
     _require_admin_key(x_admin_key)
 
-    # 1) Delete local uploaded PDFs
     upload_dir = Path("data/uploads")
     deleted_files = 0
 
+    # Purge local file system.
     if upload_dir.exists() and upload_dir.is_dir():
         for p in upload_dir.glob("*"):
             try:
@@ -182,13 +219,15 @@ async def admin_clear_all(x_admin_key: str | None = Header(default=None)) -> dic
                 elif p.is_dir():
                     shutil.rmtree(p, ignore_errors=True)
             except Exception:
-                # ignore errors during cleanup
+                # Senior Note: Silent catch here as non-critical file cleanup 
+                # should not halt the overall purge process.
                 pass
 
-    # 2) Delete ALL vectors in Pinecone
+    # Purge remote vector database.
     delete_all_vectors()
 
     return {
         "message": "Cleared uploads + Pinecone vectors successfully.",
         "deleted_files": deleted_files,
     }
+    

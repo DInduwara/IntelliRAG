@@ -22,6 +22,7 @@ export type QAResponse = {
   sub_questions?: string[];
   citations?: CitationsMap;
   confidence?: "high" | "medium" | "low";
+  thread_id?: string
 };
 
 export type IndexPdfResponse = {
@@ -33,6 +34,7 @@ export type IndexPdfResponse = {
 
 export type QARequest = {
   question: string;
+  thread_id?: string;
 
   /**
    * If provided, restrict retrieval to this document source name.

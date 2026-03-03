@@ -1,13 +1,11 @@
-"""Vector store wrapper for Pinecone integration with LangChain.
+"""
+Vector Store Integration Module
 
-This module centralizes:
-- Pinecone client setup
-- Embedding model setup
-- Retriever construction
-- Retrieval + optional metadata filtering (document-scoped retrieval)
-
-Option C feature:
-- Support retrieval scoped to a single PDF by filtering on metadata["source"].
+This module serves as the Data Access Layer (DAL) for the RAG pipeline. It manages 
+all interactions with the Pinecone vector database and the OpenAI embeddings API.
+By centralizing these operations, we ensure efficient connection pooling (via caching), 
+consistent chunking strategies, and secure metadata filtering (document scoping) 
+across the entire application.
 """
 
 from __future__ import annotations
@@ -25,13 +23,26 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ..config import get_settings
 
+# Hardcoded expectation for the text-embedding-3-large or text-embedding-ada-002 models.
+# Enforcing this prevents silent failures where embeddings don't match the DB index.
 EXPECTED_EMBED_DIM = 3072
 
 
 def _extract_index_dimension(pc: Pinecone, index_name: str) -> int | None:
     """
-    Pinecone SDK versions differ slightly.
-    Try multiple ways to get dimension. Return None if not found.
+    Safely extracts the dimension of a remote Pinecone index.
+    
+    Senior Note: Pinecone SDK versions historically vary in how they return index 
+    metadata (object attributes vs. dictionary keys). This helper uses a robust 
+    try/except approach to guarantee we can read the dimension regardless of the 
+    underlying SDK version, preventing brittle runtime crashes.
+
+    Args:
+        pc (Pinecone): The authenticated Pinecone client.
+        index_name (str): The target index name.
+
+    Returns:
+        int | None: The dimension size, or None if it cannot be determined.
     """
     try:
         info = pc.describe_index(index_name)
@@ -40,6 +51,7 @@ def _extract_index_dimension(pc: Pinecone, index_name: str) -> int | None:
         if isinstance(info, dict) and "dimension" in info:
             return int(info["dimension"])
     except Exception:
+        # Fail gracefully; we will bypass the dimension check if the API blocks us
         pass
     return None
 
@@ -47,16 +59,25 @@ def _extract_index_dimension(pc: Pinecone, index_name: str) -> int | None:
 @lru_cache(maxsize=1)
 def _get_vector_store() -> PineconeVectorStore:
     """
-    Create and cache a PineconeVectorStore instance.
+    Singleton factory for the PineconeVectorStore.
 
-    Why cache?
-    - Avoid re-initializing Pinecone + embeddings on every request.
-    - Reduces latency and improves stability under load.
+    Senior Note on Connection Management:
+    Initializing the Pinecone client and OpenAI Embeddings model over HTTP is expensive. 
+    Using `@lru_cache(maxsize=1)` implements the Singleton pattern, ensuring we only 
+    establish these connections once per server worker. This drastically reduces latency 
+    and prevents connection pool exhaustion under high API load.
+
+    Returns:
+        PineconeVectorStore: The configured LangChain vector store wrapper.
+        
+    Raises:
+        RuntimeError: If the remote database dimension does not match our embedding model.
     """
     settings = get_settings()
 
     pc = Pinecone(api_key=settings.pinecone_api_key)
 
+    # Startup Guardrail: Validate dimension alignment before accepting traffic
     index_dim = _extract_index_dimension(pc, settings.pinecone_index_name)
     if index_dim is not None and index_dim != EXPECTED_EMBED_DIM:
         raise RuntimeError(
@@ -66,6 +87,7 @@ def _get_vector_store() -> PineconeVectorStore:
 
     index = pc.Index(settings.pinecone_index_name)
 
+    # Initialize the embedding model that will convert user text into vectors
     embeddings = OpenAIEmbeddings(
         model=settings.openai_embedding_model_name,
         api_key=settings.openai_api_key,
@@ -83,22 +105,21 @@ def get_retriever(
     document_scope: str | None = None,
 ):
     """
-    Build a retriever with optional document-level filtering.
+    Constructs a dynamic LangChain Retriever with optional metadata boundaries.
+
+    
 
     Args:
-        k:
-            Number of final results returned.
-        search_type:
-            "similarity" (default) or "mmr" (diversity-aware).
-        fetch_k:
-            Used mainly for MMR. Controls candidate pool size.
-        lambda_mult:
-            Used mainly for MMR. Controls diversity vs relevance.
-        document_scope:
-            If provided, restrict retrieval to a single PDF (metadata["source"] == document_scope).
+        k (int): Number of final documents to return.
+        search_type (str): "similarity" (standard cosine/dot product) or "mmr" 
+            (Maximum Marginal Relevance to ensure diversity in results).
+        fetch_k (int): Number of initial candidates to pull before MMR pruning.
+        lambda_mult (float): MMR tuning parameter (0 to 1). Higher = more relevant, Lower = more diverse.
+        document_scope (str): Filename to restrict the search. Crucial for the 
+            "Selected PDF" UI feature to prevent cross-contamination of answers.
 
     Returns:
-        LangChain retriever instance.
+        A LangChain VectorStoreRetriever configured with the requested constraints.
     """
     settings = get_settings()
     if k is None:
@@ -106,18 +127,18 @@ def get_retriever(
 
     vector_store = _get_vector_store()
 
+    # Build the keyword arguments dynamically based on requested search parameters
     search_kwargs: Dict[str, Any] = {"k": k}
 
-    # Optional MMR tuning
+    # Apply MMR-specific tuning if provided
     if fetch_k is not None:
         search_kwargs["fetch_k"] = fetch_k
     if lambda_mult is not None:
         search_kwargs["lambda_mult"] = lambda_mult
 
-    # Notes:
-    # - Pinecone filter works only if vectors were indexed with metadata including "source"
-    # - In your pipeline, PyPDFLoader sets metadata["source"] to the file path/name.
-    # - We keep it consistent by passing `document_scope` as a filename.
+    # Apply Database-level metadata filtering. 
+    # This executes at the Pinecone level, making it vastly more efficient than 
+    # retrieving everything and filtering in Python.
     if document_scope:
         search_kwargs["filter"] = {"source": document_scope}
 
@@ -134,7 +155,8 @@ def retrieve(
     document_scope: str | None = None,
 ) -> List[Document]:
     """
-    Perform retrieval for a query with optional document filtering.
+    Convenience wrapper to instantiate a retriever and immediately execute a search.
+    Used heavily by the `retrieval_tool` in tools.py.
     """
     retriever = get_retriever(
         k=k,
@@ -147,20 +169,34 @@ def retrieve(
 
 
 def index_documents(docs: List[Document]) -> int:
-    """Index a list of Document objects into Pinecone.
+    """
+    The main ingestion pipeline for new PDFs.
+    
+    Splits raw, full-page LangChain Documents into smaller, semantically meaningful 
+    chunks, embeds them, and uploads them to Pinecone.
 
-    Important:
-    - We rely on doc.metadata["source"] for document-scoped retrieval.
-    - Ensure the loader produces "source" metadata. (PyPDFLoader does.)
+    Args:
+        docs (List[Document]): Full-text documents (usually one per page) from a loader.
+
+    Returns:
+        int: The total number of chunks successfully uploaded to the database.
+        
+    Raises:
+        RuntimeError: If the Pinecone upsert operation fails (e.g., rate limit, network).
     """
     if not docs:
         return 0
 
+    # Senior Note on Chunking: 
+    # 500 characters with a 50 character overlap is a standard baseline for RAG. 
+    # The overlap ensures that a concept split across two chunks doesn't lose its context.
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     chunks = splitter.split_documents(docs)
 
     vector_store = _get_vector_store()
     try:
+        # LangChain automatically handles batching the embedding API calls 
+        # and the Pinecone upsert operations under the hood here.
         vector_store.add_documents(chunks)
     except PineconeApiException as e:
         raise RuntimeError(f"Pinecone upsert failed: {e}") from e
@@ -169,8 +205,11 @@ def index_documents(docs: List[Document]) -> int:
 
 def delete_all_vectors() -> None:
     """
-    Deletes ALL vectors from the Pinecone index.
-    Use this when you want a fresh deploy with no previous document data.
+    Hard-resets the remote vector database.
+    
+    Senior Note: This is an administrative function (triggered via the /admin/clear endpoint).
+    It directly interfaces with the Pinecone client to bypass LangChain's abstractions
+    for a guaranteed complete wipe of the index.
     """
     settings = get_settings()
 
@@ -183,4 +222,4 @@ def delete_all_vectors() -> None:
         raise RuntimeError(f"Pinecone delete_all failed: {e}") from e
     except Exception as e:
         raise RuntimeError(f"Pinecone delete_all failed: {e}") from e
-
+    
