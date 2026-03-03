@@ -1,26 +1,29 @@
 """
-LangGraph Orchestrator Module
+LangGraph Orchestrator Module (PostgreSQL Memory Edition)
 """
 from __future__ import annotations
 
 from functools import lru_cache
 from typing import Any
 import re
+import os
+
+from psycopg_pool import ConnectionPool
 
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
 
 from .agents import (
     planning_node, 
     retrieval_node, 
-    context_critic_node, # <-- Imported the new node
+    context_critic_node, 
     summarization_node, 
     verification_node
 )
 from .state import QAState
+from ..config import get_settings
 
-memory = MemorySaver()
 _CITATION_RE = re.compile(r"\[([^\[\]\n]{1,40})\]")
 
 
@@ -74,28 +77,45 @@ def _compute_confidence(answer: str, allowed_ids: set[str]) -> str:
     return "low"
 
 
+@lru_cache(maxsize=1)
+def get_postgres_saver() -> PostgresSaver:
+    """
+    Singleton factory for the PostgresSaver.
+    We create a connection pool to Neon.tech and pass it to LangGraph.
+    LangGraph's PostgresSaver uses this pool to save and load thread states.
+    """
+    settings = get_settings()
+    # It's important to use max_size=10 (or similar) to prevent exhausting
+    # connection limits on serverless databases like Neon.
+    pool = ConnectionPool(conninfo=settings.database_url, max_size=10, open=False)
+    pool.open()
+    
+    saver = PostgresSaver(pool)
+    
+    # Run migrations: this automatically creates the required "checkpoints" 
+    # and "checkpoint_writes" tables in your database if they don't exist yet!
+    saver.setup() 
+    return saver
+
+
 def create_qa_graph() -> Any:
     builder = StateGraph(QAState)
 
     builder.add_node("planning", planning_node) 
     builder.add_node("retrieval", retrieval_node)
-    
-    # FEATURE 3: Register the critic node
     builder.add_node("context_critic", context_critic_node)
-    
     builder.add_node("summarization", summarization_node)
     builder.add_node("verification", verification_node)
 
     builder.add_edge(START, "planning")
     builder.add_edge("planning", "retrieval")
-    
-    # FEATURE 3: Rewire the graph to insert the critic!
     builder.add_edge("retrieval", "context_critic")
     builder.add_edge("context_critic", "summarization")
-    
     builder.add_edge("summarization", "verification")
     builder.add_edge("verification", END)
 
+    # We now fetch the PostgresSaver singleton instead of MemorySaver
+    memory = get_postgres_saver()
     return builder.compile(checkpointer=memory) 
 
 
@@ -115,8 +135,8 @@ def run_qa_flow(question: str, thread_id: str, document_scope: str | None = None
         "context": None,
         "citations": None,
         "retrieval_traces": [],
-        "raw_context": None,       # Added
-        "context_rationale": None, # Added
+        "raw_context": None, 
+        "context_rationale": None,
         "draft_answer": None,
         "answer": None,
         "confidence": "low",

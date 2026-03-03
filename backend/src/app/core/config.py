@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # NEW: Used to verify that the Auth Token actually came from your Clerk application
     clerk_issuer_url: str | None = None
+    database_url: str
     
     retrieval_k: int = 4
     frontend_origin: str = "http://localhost:3000"
