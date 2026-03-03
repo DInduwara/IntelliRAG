@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs"; // <-- NEW: Import Clerk's auth hook
 import { askQuestion } from "@/lib/api";
 import type { QAResponse, CitationsMap } from "@/lib/types";
 import { Button } from "@/components/Button";
@@ -26,6 +27,8 @@ function evidenceElementId(citationId: string, index: number) {
 }
 
 export default function Page() {
+  const { getToken } = useAuth(); // <-- NEW: Initialize the token fetcher
+
   const [question, setQuestion] = useState("");
   const [threadId] = useState(() => crypto.randomUUID());
   const [lastUploaded, setLastUploaded] = useState<string | null>(null);
@@ -85,11 +88,15 @@ export default function Page() {
 
     try {
       setLoading(true);
+      
+      const token = await getToken(); // <-- NEW: Fetch live token
+      
       const res = await askQuestion({
         question: question.trim(),
         document_scope,
         thread_id: threadId,
-      });
+      }, token || undefined); // <-- NEW: Pass token to API
+
       setChatHistory((prev) => [...prev, { q: question.trim(), r: res }]);
       setQuestion(""); 
     } catch (e: unknown) {
