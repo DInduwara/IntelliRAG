@@ -7,20 +7,16 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function pickMessage(errBody: unknown): string | null {
   if (!isRecord(errBody)) return null;
-
   const detail = errBody.detail;
   if (typeof detail === "string") return detail;
-
   if (Array.isArray(detail)) {
     const msgs = detail
       .map((d) => (isRecord(d) && typeof d.msg === "string" ? d.msg : null))
       .filter((x): x is string => Boolean(x));
     if (msgs.length) return msgs.join(", ");
   }
-
   const message = errBody.message;
   if (typeof message === "string") return message;
-
   return null;
 }
 
@@ -57,11 +53,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(msg);
   }
 
-  const data = (await safeJson(res)) as unknown;
+  const data = await safeJson(res);
   return data as T;
 }
 
 export async function askQuestion(payload: QARequest): Promise<QAResponse> {
+  // Senior Note: Spreading 'payload' here ensures thread_id is sent to the backend
   return request<QAResponse>("/qa", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
