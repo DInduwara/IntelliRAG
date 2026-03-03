@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@clerk/nextjs"; // <-- NEW: Import Clerk's auth hook
 import { indexPdf, adminClearAll } from "@/lib/api";
 import { Spinner } from "@/components/Spinner";
 import { FileDropzone } from "@/components/FileDropzone";
 
 export default function UploadPage() {
+  const { getToken } = useAuth(); // <-- NEW: Initialize the token fetcher
+
   const [fileName, setFileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -21,7 +24,9 @@ export default function UploadPage() {
     try {
       setLoading(true);
 
-      const res = await indexPdf(file);
+      const token = await getToken(); // <-- NEW: Fetch live token
+      
+      const res = await indexPdf(file, token || undefined); // <-- NEW: Pass token
       window.localStorage.setItem("intelirag:lastUploadedPdf", file.name);
 
       setStatus(res.message ?? res.status ?? "Indexed successfully");
@@ -44,7 +49,10 @@ export default function UploadPage() {
 
     try {
       setLoading(true);
-      const res = await adminClearAll(key);
+      
+      const token = await getToken(); // <-- NEW: Fetch live token
+      
+      const res = await adminClearAll(key, token || undefined); // <-- NEW: Pass token
       window.localStorage.removeItem("intelirag:lastUploadedPdf");
       setFileName(null);
       setStatus(res.message ?? "Cleared successfully");

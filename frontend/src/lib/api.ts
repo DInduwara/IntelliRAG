@@ -28,17 +28,25 @@ async function safeJson(res: Response): Promise<unknown> {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// Added an optional 'token' parameter to handle authenticated requests
+async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const base = getApiBaseUrl();
   const url = `${base}${path}`;
+
+  const headers: Record<string, string> = { 
+    ...((init?.headers as Record<string, string>) || {}) 
+  };
+  
+  // If a Clerk JWT token is provided, attach it as a Bearer token
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
 
   let res: Response;
   try {
     res = await fetch(url, {
       ...init,
-      headers: {
-        ...(init?.headers ?? {}),
-      },
+      headers,
       cache: "no-store",
     });
   } catch {
@@ -57,32 +65,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export async function askQuestion(payload: QARequest): Promise<QAResponse> {
-  // Senior Note: Spreading 'payload' here ensures thread_id is sent to the backend
+// Updated exports to accept the optional auth token
+export async function askQuestion(payload: QARequest, token?: string): Promise<QAResponse> {
   return request<QAResponse>("/qa", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }, token);
 }
 
-export async function indexPdf(file: File): Promise<IndexPdfResponse> {
+export async function indexPdf(file: File, token?: string): Promise<IndexPdfResponse> {
   const form = new FormData();
   form.append("file", file);
 
   return request<IndexPdfResponse>("/index-pdf", {
     method: "POST",
     body: form,
-  });
+  }, token);
 }
 
-
-export async function adminClearAll(adminKey: string): Promise<{ message: string; deleted_files?: number }> {
+export async function adminClearAll(adminKey: string, token?: string): Promise<{ message: string; deleted_files?: number }> {
   return request<{ message: string; deleted_files?: number }>("/admin/clear", {
     method: "DELETE",
     headers: {
       "X-ADMIN-KEY": adminKey,
     },
-  });
+  }, token);
 }
-
