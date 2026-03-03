@@ -154,6 +154,8 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
     plan = result.get("plan")
     sub_questions = result.get("sub_questions")
     retrieval_traces = result.get("retrieval_traces")
+    raw_context = result.get("raw_context")
+    context_rationale = result.get("context_rationale")
 
     return QAResponse(
         answer=result.get("answer", "") or "",
@@ -162,6 +164,8 @@ async def qa_endpoint(payload: QuestionRequest) -> QAResponse:
         sub_questions=sub_questions,
         citations=citations,
         retrieval_traces=retrieval_traces,
+        raw_context=raw_context,
+        context_rationale=context_rationale,
         confidence=confidence,
         thread_id=thread_id
     )

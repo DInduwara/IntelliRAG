@@ -27,7 +27,9 @@ export type QAResponse = {
   plan?: string;
   sub_questions?: string[];
   citations?: CitationsMap;
-  retrieval_traces?: RetrievalTrace[]; // Added
+  retrieval_traces?: RetrievalTrace[];
+  raw_context?: string;
+  context_rationale?: string;
   confidence?: "high" | "medium" | "low";
   thread_id?: string
 };

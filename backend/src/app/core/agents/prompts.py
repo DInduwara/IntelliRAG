@@ -1,21 +1,10 @@
 """
 Agent Prompts Configuration Module
-
-This module centralizes the system prompts (personas and instructions) for the 
-multi-agent RAG pipeline. By isolating prompts from the execution logic (agents.py), 
-we ensure separation of concerns, making it easier to version-control, evaluate, 
-and tune the behavior of the Large Language Models (LLMs) without altering backend code.
-
-Each prompt is carefully engineered to restrict the LLM to a single, specialized task,
-reducing hallucinations and improving the determinism of the overall LangGraph workflow.
 """
 
 # ==============================================================================
 # 1. Retrieval Agent Prompt
 # ==============================================================================
-# Senior Note: This prompt explicitly forbids the agent from answering the user's
-# question. Its sole purpose is to act as a router/executor for the vector database 
-# tools. This prevents premature hallucinations before context is gathered.
 RETRIEVAL_SYSTEM_PROMPT = """
 Role: Retrieval Agent (evidence fetcher)
 
@@ -30,13 +19,34 @@ Rules:
 - Use a focused query that includes key nouns/terms.
 """.strip()
 
+# ==============================================================================
+# 2. Context Critic Agent Prompt (FEATURE 3)
+# ==============================================================================
+# Senior Note: This prompt forces the LLM to act as a rigorous quality filter.
+# By forcing it to output in a strict RATIONALE / FILTERED_CONTEXT format, we can
+# easily parse its output using Regex in our Python node.
+CONTEXT_CRITIC_SYSTEM_PROMPT = """
+Role: Context Critic (Relevance Filter)
+
+You will receive a User Question and a CONTEXT block containing retrieved document chunks labeled with IDs (e.g., [P1-C123]).
+
+Tasks:
+1. Analyze each chunk's relevance to the User Question.
+2. Score each chunk as HIGHLY RELEVANT, MARGINAL, or IRRELEVANT.
+3. Provide a brief rationale for your score.
+4. Output a new filtered context block containing ONLY the HIGHLY RELEVANT and MARGINAL chunks, preserving their exact original formatting and IDs.
+
+Strict Output Format:
+RATIONALE:
+- [Chunk ID]: [Score] - [Brief rationale]
+
+FILTERED_CONTEXT:
+[Only the kept chunks exactly as they appeared in the input]
+""".strip()
 
 # ==============================================================================
-# 2. Summarization Agent Prompt
+# 3. Summarization Agent Prompt
 # ==============================================================================
-# Senior Note: This is the core generation prompt. It enforces strict "grounding" 
-# (only using the provided context) and mandates chunk-level citation tags. 
-# The strict formatting requested here allows our frontend to map citations to UI elements.
 SUMMARIZATION_SYSTEM_PROMPT = """
 Role: Answer Writer (grounded, citation-required)
 
@@ -60,14 +70,9 @@ Style:
 - Keep wording aligned with the source when it is a specification or requirement.
 """.strip()
 
-
 # ==============================================================================
-# 3. Verification Agent Prompt
+# 4. Verification Agent Prompt
 # ==============================================================================
-# Senior Note: This acts as the "Self-Correction" loop in the graph. 
-# LLMs are prone to "lost in the middle" syndrome or hallucinating citation IDs. 
-# This prompt forces a second LLM pass strictly dedicated to auditing the draft 
-# answer against the original context before it reaches the user.
 VERIFICATION_SYSTEM_PROMPT = """
 Role: Verification Agent (fact-check + citation integrity)
 
@@ -90,14 +95,9 @@ Tasks:
    - Return only the corrected final answer text (with citations).
 """.strip()
 
-
 # ==============================================================================
-# 4. Planning Agent Prompt
+# 5. Planning Agent Prompt
 # ==============================================================================
-# Senior Note: This prompt drives the Query Decomposition phase. 
-# The exact formatting (PLAN: ... QUESTIONS: ...) is critical because our graph.py
-# relies on standard Regular Expressions (re) to parse this output. If the LLM 
-# deviates from this format, the pipeline will fall back to a generic single-query search.
 PLANNING_SYSTEM_PROMPT = """
 Role: Search Strategist (Query Decomposition Expert)
 

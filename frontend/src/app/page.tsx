@@ -129,6 +129,7 @@ export default function Page() {
 
           const hasPlan = Boolean(data.plan || (data.sub_questions && data.sub_questions.length > 0));
           const hasTraces = Boolean(data.retrieval_traces && data.retrieval_traces.length > 0);
+          const hasCritic = Boolean(data.context_rationale);
           
           const confidence = data.confidence ?? "low";
           const confidenceTone =
@@ -178,6 +179,25 @@ export default function Page() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* FEATURE 3: CONTEXT CRITIC INSPECTOR */}
+                {hasCritic && (
+                  <details className="group rounded-2xl border border-amber-500/20 bg-amber-500/5 transition-all">
+                    <summary className="cursor-pointer p-4 text-xs font-semibold text-amber-300 flex items-center justify-between outline-none">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Context Critic Rationale (Filtering Noise)
+                      </div>
+                    </summary>
+                    <div className="p-4 pt-0 border-t border-amber-500/10 mt-2">
+                      <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">
+                        {data.context_rationale}
+                      </pre>
                     </div>
                   </details>
                 )}
@@ -274,13 +294,27 @@ export default function Page() {
                       </div>
                     </div>
                     
+                    {/* FEATURE 3: UPDATED DEBUG PAYLOAD VIEW */}
                     <details className="mt-6 border-t border-white/5 pt-4">
                       <summary className="text-xs font-semibold text-zinc-500 hover:text-zinc-300 cursor-pointer transition outline-none">
-                        View Structured Raw Context (Debug)
+                        View Context Payloads (Debug)
                       </summary>
-                      <pre className="mt-3 max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-400 whitespace-pre-wrap">
-                        {data.context}
-                      </pre>
+                      <div className="mt-3 space-y-4">
+                        <div>
+                          <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Filtered Context (Sent to Answer Writer)</div>
+                          <pre className="max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-400 whitespace-pre-wrap border border-amber-500/20">
+                            {data.context}
+                          </pre>
+                        </div>
+                        {data.raw_context && data.raw_context !== data.context && (
+                          <div>
+                            <div className="text-[10px] font-bold text-zinc-500 uppercase mb-1">Raw Context (Before Critic)</div>
+                            <pre className="max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-600 whitespace-pre-wrap border border-white/10 opacity-70">
+                              {data.raw_context}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
                     </details>
                   </CardBody>
                 </Card>
@@ -319,6 +353,16 @@ export default function Page() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   Agentic Planning in progress...
+                </span>
+              </div>
+
+              {/* Added a loader step for the new Critic agent */}
+              <div className="h-14 bg-amber-500/10 border border-amber-500/20 rounded-2xl animate-pulse flex items-center px-4 delay-75">
+                <span className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Context Critic evaluating chunks...
                 </span>
               </div>
 
