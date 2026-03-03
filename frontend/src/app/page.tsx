@@ -22,24 +22,18 @@ function formatSource(source?: string) {
   return parts[parts.length - 1] || source;
 }
 
-// UPDATE: Added 'index' so citation IDs are unique per chat message
 function evidenceElementId(citationId: string, index: number) {
   return `evidence-${index}-${encodeURIComponent(citationId)}`;
 }
 
 export default function Page() {
   const [question, setQuestion] = useState("");
-  
-  // NEW: Generate a unique thread ID for backend memory persistence
   const [threadId] = useState(() => crypto.randomUUID());
-
   const [lastUploaded, setLastUploaded] = useState<string | null>(null);
   const [scopeMode, setScopeMode] = useState<"all" | "selected">("all");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // NEW: Array to store the conversation flow
   const [chatHistory, setChatHistory] = useState<Array<{
     q: string;
     r: QAResponse;
@@ -56,7 +50,6 @@ export default function Page() {
     setLastUploaded(v || null);
   }, []);
 
-  // NEW: Auto-scroll to the bottom when a new message arrives or loading starts
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -71,13 +64,10 @@ export default function Page() {
 
   const canAsk = useMemo(() => question.trim().length > 2 && !loading, [question, loading]);
 
-  // UPDATE: Requires message index to jump to the correct evidence card in the list
   function jumpToEvidence(id: string, messageIndex: number) {
     const el = document.getElementById(evidenceElementId(id, messageIndex));
     if (!el) return;
-
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-
     setHighlightId(`${messageIndex}-${id}`);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
     highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1200);
@@ -85,7 +75,6 @@ export default function Page() {
 
   async function onAsk() {
     setError(null);
-
     const document_scope = scopeMode === "selected" ? lastUploaded : null;
 
     if (scopeMode === "selected" && !lastUploaded) {
@@ -95,16 +84,13 @@ export default function Page() {
 
     try {
       setLoading(true);
-
       const res = await askQuestion({
         question: question.trim(),
         document_scope,
-        thread_id: threadId, // Pass the memory thread ID
+        thread_id: threadId,
       });
-
-      // Append new interaction to history
       setChatHistory((prev) => [...prev, { q: question.trim(), r: res }]);
-      setQuestion(""); // Clear input for next question
+      setQuestion(""); 
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Request failed.";
       setError(msg);
@@ -124,7 +110,6 @@ export default function Page() {
         </div>
       </div>
 
-      {/* CHAT HISTORY FEED */}
       <div className="flex flex-col gap-12 pb-8">
         {chatHistory.length === 0 && !loading && (
           <div className="text-center text-zinc-500 py-12 border border-white/5 border-dashed rounded-3xl">
@@ -143,6 +128,8 @@ export default function Page() {
           );
 
           const hasPlan = Boolean(data.plan || (data.sub_questions && data.sub_questions.length > 0));
+          const hasTraces = Boolean(data.retrieval_traces && data.retrieval_traces.length > 0);
+          
           const confidence = data.confidence ?? "low";
           const confidenceTone =
             confidence === "high"
@@ -156,10 +143,44 @@ export default function Page() {
               
               {/* LEFT COLUMN: User Question & Evidence */}
               <div className="flex flex-col gap-6">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">You Asked</div>
                   <div className="text-zinc-100 font-medium text-lg">{item.q}</div>
                 </div>
+
+                {/* FEATURE 2: RETRIEVAL TRACE INSPECTOR */}
+                {hasTraces && (
+                  <details className="group rounded-2xl border border-indigo-500/20 bg-indigo-500/5 transition-all">
+                    <summary className="cursor-pointer p-4 text-xs font-semibold text-indigo-300 flex items-center justify-between outline-none">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Retrieval Inspector ({data.retrieval_traces?.length} search calls executed)
+                      </div>
+                    </summary>
+                    <div className="p-4 pt-0 border-t border-indigo-500/10 mt-2 space-y-3">
+                      {data.retrieval_traces?.map((trace) => (
+                        <div key={trace.call_number} className="bg-black/40 rounded-xl p-3 border border-white/5">
+                          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">
+                            Call {trace.call_number}
+                          </div>
+                          <div className="text-sm text-zinc-200 font-medium mb-3">
+                            &quot;{trace.query}&quot;
+                          </div>
+                          <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
+                            <span className="bg-white/5 px-2 py-1 rounded-md">
+                              Chunks Found: <span className="text-zinc-100 font-semibold">{trace.chunks_count}</span>
+                            </span>
+                            <span className="bg-white/5 px-2 py-1 rounded-md">
+                              Sources: <span className="text-zinc-100">{trace.sources.join(", ") || "None"}</span>
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 <Card>
                   <CardHeader 
@@ -170,7 +191,6 @@ export default function Page() {
                         type="button"
                         className="rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-1 text-xs font-semibold text-zinc-200 hover:bg-white/10"
                         onClick={() => setShowOnlyCited((v) => !v)}
-                        title="Filter evidence cards"
                       >
                         {showOnlyCited ? "Showing: cited" : "Showing: all"}
                       </button>
@@ -247,7 +267,6 @@ export default function Page() {
                               key={`${t.id}-${i}`}
                               id={t.id}
                               citations={citations}
-                              // Pass the correct index so it jumps to the evidence in THIS block
                               onClick={(id) => jumpToEvidence(id, index)}
                             />
                           )
@@ -256,8 +275,8 @@ export default function Page() {
                     </div>
                     
                     <details className="mt-6 border-t border-white/5 pt-4">
-                      <summary className="text-xs font-semibold text-zinc-500 hover:text-zinc-300 cursor-pointer transition">
-                        View Raw Context (Debug)
+                      <summary className="text-xs font-semibold text-zinc-500 hover:text-zinc-300 cursor-pointer transition outline-none">
+                        View Structured Raw Context (Debug)
                       </summary>
                       <pre className="mt-3 max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-400 whitespace-pre-wrap">
                         {data.context}
@@ -271,12 +290,11 @@ export default function Page() {
           );
         })}
 
-        {/* --- NEW: SKELETON LOADER FOR PROCESSING STATE --- */}
+        {/* LOADING SKELETON */}
         {loading && (
           <div className="grid gap-6 lg:grid-cols-2 bg-zinc-950/20 p-6 rounded-3xl border border-indigo-500/20 shadow-[0_0_30px_rgba(99,102,241,0.05)] animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Left Column: User's Pending Question */}
             <div className="flex flex-col gap-6">
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-2 flex items-center gap-2">
                   <Spinner /> Sending...
                 </div>
@@ -294,7 +312,6 @@ export default function Page() {
               </Card>
             </div>
 
-            {/* Right Column: AI Processing Blocks */}
             <div className="flex flex-col gap-6 lg:self-start">
               <div className="h-14 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl animate-pulse flex items-center px-4">
                 <span className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
@@ -319,13 +336,10 @@ export default function Page() {
             </div>
           </div>
         )}
-        {/* ----------------------------------------------- */}
-
-        {/* Invisible div to scroll to */}
         <div ref={chatEndRef} className="h-4" /> 
       </div>
 
-      {/* STICKY BOTTOM INPUT AREA */}
+      {/* INPUT AREA */}
       <div className="sticky bottom-6 z-10 w-full mt-auto">
         <Card className="shadow-2xl shadow-black/50 border-white/20 bg-zinc-900/95 backdrop-blur-md">
           <CardBody>
@@ -360,7 +374,7 @@ export default function Page() {
 
             <div className="relative">
               <textarea
-                disabled={loading} // NEW: Disable input while waiting for backend
+                disabled={loading}
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyDown={(e) => {
