@@ -13,8 +13,11 @@ class QAResponse(BaseModel):
     sub_questions: Optional[List[str]] = None
     citations: Optional[Dict[str, Any]] = None
     
-    # NEW FEATURE 2: Expose the retrieval trace log to the frontend
+
     retrieval_traces: Optional[List[Dict[str, Any]]] = None
+    
+    raw_context: Optional[str] = None
+    context_rationale: Optional[str] = None
     
     confidence: str = "low"
     thread_id: Optional[str] = None
