@@ -8,12 +8,18 @@ export type CitationItem = {
   page_label?: string | number;
   source?: string;
   snippet?: string;
-
-  // optional full text if backend includes it
   text?: string;
 };
 
 export type CitationsMap = Record<string, CitationItem>;
+
+// NEW FEATURE 2: Interface for the trace logs
+export type RetrievalTrace = {
+  call_number: number;
+  query: string;
+  chunks_count: number;
+  sources: string[];
+};
 
 export type QAResponse = {
   answer: string;
@@ -21,6 +27,7 @@ export type QAResponse = {
   plan?: string;
   sub_questions?: string[];
   citations?: CitationsMap;
+  retrieval_traces?: RetrievalTrace[]; // Added
   confidence?: "high" | "medium" | "low";
   thread_id?: string
 };
@@ -35,10 +42,5 @@ export type IndexPdfResponse = {
 export type QARequest = {
   question: string;
   thread_id?: string;
-
-  /**
-   * If provided, restrict retrieval to this document source name.
-   * If null/undefined, backend will search across all indexed PDFs.
-   */
   document_scope?: string | null;
 };
