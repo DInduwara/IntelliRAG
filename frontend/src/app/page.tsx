@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { askQuestion } from "@/lib/api";
 import type { QAResponse, CitationsMap } from "@/lib/types";
-import { Card, CardBody, CardHeader } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Spinner } from "@/components/Spinner";
 import { CitationTag } from "@/components/CitationTag";
@@ -67,10 +66,12 @@ export default function Page() {
   function jumpToEvidence(id: string, messageIndex: number) {
     const el = document.getElementById(evidenceElementId(id, messageIndex));
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    
+    // Smooth scroll horizontally if it's in a scrollable row
+    el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     setHighlightId(`${messageIndex}-${id}`);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1200);
+    highlightTimer.current = window.setTimeout(() => setHighlightId(null), 1500);
   }
 
   async function onAsk() {
@@ -100,20 +101,26 @@ export default function Page() {
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ask IntelliRAG</h1>
-          <p className="mt-2 text-zinc-300/80">
-            Stateful conversation. The assistant remembers context across follow-up questions.
-          </p>
-        </div>
+    <div className="relative min-h-screen pb-40">
+      {/* HEADER */}
+      <div className="max-w-3xl mx-auto pt-10 px-4 mb-10">
+        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-500">
+          IntelliRAG
+        </h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Stateful Multi-Agent Architecture
+        </p>
       </div>
 
-      <div className="flex flex-col gap-12 pb-8">
+      {/* MAIN CHAT FEED */}
+      <div className="flex flex-col max-w-3xl mx-auto px-4 w-full gap-10">
         {chatHistory.length === 0 && !loading && (
-          <div className="text-center text-zinc-500 py-12 border border-white/5 border-dashed rounded-3xl">
-            No messages yet. Ask a question below to start the conversation!
+          <div className="flex flex-col items-center justify-center py-20 text-center opacity-60">
+            <svg className="w-16 h-16 mb-4 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <p className="text-lg font-medium text-zinc-300">How can I help you today?</p>
+            <p className="text-sm text-zinc-500 mt-2 max-w-md">Ask a complex question, and my agents will plan a search strategy and filter noise to find the exact answer.</p>
           </div>
         )}
 
@@ -132,318 +139,272 @@ export default function Page() {
           const hasCritic = Boolean(data.context_rationale);
           
           const confidence = data.confidence ?? "low";
-          const confidenceTone =
-            confidence === "high"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
-              : confidence === "medium"
-              ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
-              : "border-red-500/30 bg-red-500/10 text-red-100";
 
           return (
-            <div key={index} className="grid gap-6 lg:grid-cols-2 bg-zinc-950/20 p-6 rounded-3xl border border-white/5">
+            <div key={index} className="flex flex-col gap-6 w-full animate-in fade-in slide-in-from-bottom-4 duration-700">
               
-              {/* LEFT COLUMN: User Question & Evidence */}
-              <div className="flex flex-col gap-6">
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">You Asked</div>
-                  <div className="text-zinc-100 font-medium text-lg">{item.q}</div>
+              {/* 1. USER MESSAGE BUBBLE */}
+              <div className="flex justify-end w-full">
+                <div className="bg-zinc-800 text-zinc-100 px-5 py-3.5 rounded-3xl rounded-tr-sm max-w-[85%] sm:max-w-[75%] text-[15px] shadow-sm border border-white/5">
+                  {item.q}
+                </div>
+              </div>
+
+              {/* 2. AI RESPONSE CONTAINER */}
+              <div className="flex flex-col gap-4 w-full">
+                {/* AI Header & Avatar */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <span className="font-semibold text-zinc-200">IntelliRAG</span>
+                  
+                  {/* Confidence Badge */}
+                  <span className={`ml-2 px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
+                    confidence === "high" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" :
+                    confidence === "medium" ? "border-amber-500/30 text-amber-400 bg-amber-500/10" :
+                    "border-red-500/30 text-red-400 bg-red-500/10"
+                  }`}>
+                    {confidence}
+                  </span>
                 </div>
 
-                {/* FEATURE 2: RETRIEVAL TRACE INSPECTOR */}
-                {hasTraces && (
-                  <details className="group rounded-2xl border border-indigo-500/20 bg-indigo-500/5 transition-all">
-                    <summary className="cursor-pointer p-4 text-xs font-semibold text-indigo-300 flex items-center justify-between outline-none">
-                      <div className="flex items-center gap-2">
-                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        Retrieval Inspector ({data.retrieval_traces?.length} search calls executed)
-                      </div>
-                    </summary>
-                    <div className="p-4 pt-0 border-t border-indigo-500/10 mt-2 space-y-3">
-                      {data.retrieval_traces?.map((trace) => (
-                        <div key={trace.call_number} className="bg-black/40 rounded-xl p-3 border border-white/5">
-                          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">
-                            Call {trace.call_number}
-                          </div>
-                          <div className="text-sm text-zinc-200 font-medium mb-3">
-                            &quot;{trace.query}&quot;
-                          </div>
-                          <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-                            <span className="bg-white/5 px-2 py-1 rounded-md">
-                              Chunks Found: <span className="text-zinc-100 font-semibold">{trace.chunks_count}</span>
-                            </span>
-                            <span className="bg-white/5 px-2 py-1 rounded-md">
-                              Sources: <span className="text-zinc-100">{trace.sources.join(", ") || "None"}</span>
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-
-                {/* FEATURE 3: CONTEXT CRITIC INSPECTOR */}
-                {hasCritic && (
-                  <details className="group rounded-2xl border border-amber-500/20 bg-amber-500/5 transition-all">
-                    <summary className="cursor-pointer p-4 text-xs font-semibold text-amber-300 flex items-center justify-between outline-none">
-                      <div className="flex items-center gap-2">
-                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        Context Critic Rationale (Filtering Noise)
-                      </div>
-                    </summary>
-                    <div className="p-4 pt-0 border-t border-amber-500/10 mt-2">
-                      <pre className="text-xs text-zinc-300 whitespace-pre-wrap font-sans leading-relaxed">
-                        {data.context_rationale}
-                      </pre>
-                    </div>
-                  </details>
-                )}
-
-                <Card>
-                  <CardHeader 
-                    title="Evidence" 
-                    subtitle="Chunk citations for this answer"
-                    right={
-                      <button
-                        type="button"
-                        className="rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-1 text-xs font-semibold text-zinc-200 hover:bg-white/10"
-                        onClick={() => setShowOnlyCited((v) => !v)}
-                      >
-                        {showOnlyCited ? "Showing: cited" : "Showing: all"}
-                      </button>
-                    }
-                  />
-                  <CardBody>
-                    <div className="grid gap-3 max-h-[500px] overflow-y-auto pr-2 scrollbar-thin">
-                      {evidenceEntries.length > 0 ? (
-                        evidenceEntries.map(([id, meta]) => {
-                          const isCited = citedSet.has(id);
-                          const isHighlighted = highlightId === `${index}-${id}`;
-
-                          return (
-                            <div
-                              key={id}
-                              id={evidenceElementId(id, index)}
-                              className={[
-                                "rounded-2xl border p-4 transition-all duration-300",
-                                isHighlighted
-                                  ? "border-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-400/20 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-                                  : isCited
-                                  ? "border-white/15 bg-white/5"
-                                  : "border-white/10 bg-white/5 opacity-60",
-                              ].join(" ")}
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="text-sm font-semibold text-zinc-100">[{id}]</div>
-                                </div>
-                                <div className="text-xs text-zinc-400">
-                                  Page <span className="text-zinc-200 font-semibold">{formatPageLabel(meta)}</span>
-                                </div>
-                              </div>
-                              <p className="mt-3 text-sm text-zinc-300 leading-relaxed">
-                                {meta.snippet ?? "(no snippet provided)"}
-                              </p>
-                              <div className="mt-3 text-xs text-zinc-500">
-                                Source: <span className="text-zinc-400">{formatSource(meta.source)}</span>
-                              </div>
-                            </div>
-                          );
-                        })
+                {/* Answer Text */}
+                <div className="pl-11 prose prose-invert max-w-none">
+                  <div className="text-zinc-300 leading-relaxed text-[15px]">
+                    {tokenizeAnswer(data.answer ?? "").map((t, i) =>
+                      t.type === "text" ? (
+                        <span key={i}>{t.value}</span>
                       ) : (
-                        <div className="text-sm text-zinc-500 text-center py-4">No citations referenced.</div>
-                      )}
-                    </div>
-                  </CardBody>
-                </Card>
-              </div>
+                        <CitationTag
+                          key={`${t.id}-${i}`}
+                          id={t.id}
+                          citations={citations}
+                          onClick={(id) => jumpToEvidence(id, index)}
+                        />
+                      )
+                    )}
+                  </div>
+                </div>
 
-              {/* RIGHT COLUMN: Plan & Answer */}
-              <div className="flex flex-col gap-6 lg:self-start">
-                {hasPlan ? (
-                  <QueryPlan plan={data.plan || ""} subQuestions={data.sub_questions || []} />
-                ) : null}
-
-                <Card>
-                  <CardHeader 
-                    title="Assistant Answer" 
-                    right={
-                      <div className={`rounded-xl border px-3 py-1 text-xs font-semibold ${confidenceTone}`}>
-                        Confidence: {confidence}
-                      </div>
-                    }
-                  />
-                  <CardBody>
-                    <div className="prose prose-invert max-w-none">
-                      <div className="whitespace-pre-wrap leading-relaxed text-[15px]">
-                        {tokenizeAnswer(data.answer ?? "").map((t, i) =>
-                          t.type === "text" ? (
-                            <span key={i}>{t.value}</span>
-                          ) : (
-                            <CitationTag
-                              key={`${t.id}-${i}`}
-                              id={t.id}
-                              citations={citations}
-                              onClick={(id) => jumpToEvidence(id, index)}
-                            />
-                          )
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* FEATURE 3: UPDATED DEBUG PAYLOAD VIEW */}
-                    <details className="mt-6 border-t border-white/5 pt-4">
-                      <summary className="text-xs font-semibold text-zinc-500 hover:text-zinc-300 cursor-pointer transition outline-none">
-                        View Context Payloads (Debug)
+                {/* 3. AGENT DEBUG / TRANSPARENCY ACCORDIONS */}
+                <div className="pl-11 mt-2 flex flex-col gap-2">
+                  {hasPlan && (
+                    <details className="group rounded-xl border border-white/5 bg-white/5 overflow-hidden transition-all text-sm">
+                      <summary className="cursor-pointer px-4 py-2.5 font-medium text-zinc-400 hover:text-zinc-200 flex items-center gap-2 outline-none">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Agentic Plan ({data.sub_questions?.length || 0} sub-queries)
                       </summary>
-                      <div className="mt-3 space-y-4">
-                        <div>
-                          <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Filtered Context (Sent to Answer Writer)</div>
-                          <pre className="max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-400 whitespace-pre-wrap border border-amber-500/20">
-                            {data.context}
-                          </pre>
-                        </div>
-                        {data.raw_context && data.raw_context !== data.context && (
-                          <div>
-                            <div className="text-[10px] font-bold text-zinc-500 uppercase mb-1">Raw Context (Before Critic)</div>
-                            <pre className="max-h-40 overflow-auto rounded-xl bg-black/50 p-3 text-[10px] text-zinc-600 whitespace-pre-wrap border border-white/10 opacity-70">
-                              {data.raw_context}
-                            </pre>
-                          </div>
-                        )}
+                      <div className="px-4 pb-4 pt-1 border-t border-white/5 mt-1 bg-black/20">
+                        <QueryPlan plan={data.plan || ""} subQuestions={data.sub_questions || []} />
                       </div>
                     </details>
-                  </CardBody>
-                </Card>
-              </div>
+                  )}
 
+                  {hasTraces && (
+                    <details className="group rounded-xl border border-indigo-500/20 bg-indigo-500/5 overflow-hidden transition-all text-sm">
+                      <summary className="cursor-pointer px-4 py-2.5 font-medium text-indigo-300 hover:text-indigo-200 flex items-center gap-2 outline-none">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Retrieval Inspector ({data.retrieval_traces?.length} search calls)
+                      </summary>
+                      <div className="px-4 pb-4 pt-2 border-t border-indigo-500/10 mt-1 space-y-3 bg-black/20">
+                        {data.retrieval_traces?.map((trace) => (
+                          <div key={trace.call_number} className="bg-zinc-900 rounded-lg p-3 border border-white/5">
+                            <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Call {trace.call_number}</div>
+                            <div className="text-sm text-zinc-300 font-medium mb-2">&quot;{trace.query}&quot;</div>
+                            <div className="flex gap-3 text-xs text-zinc-500">
+                              <span>Found: <strong className="text-zinc-300">{trace.chunks_count}</strong></span>
+                              <span>Sources: <span className="text-zinc-400">{trace.sources.join(", ") || "None"}</span></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+
+                  {hasCritic && (
+                    <details className="group rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden transition-all text-sm">
+                      <summary className="cursor-pointer px-4 py-2.5 font-medium text-amber-300 hover:text-amber-200 flex items-center gap-2 outline-none">
+                        <svg className="h-4 w-4 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Context Critic (Noise Filter)
+                      </summary>
+                      <div className="px-4 pb-4 pt-2 border-t border-amber-500/10 mt-1 bg-black/20">
+                        <pre className="text-[11px] text-zinc-400 whitespace-pre-wrap font-sans leading-relaxed">
+                          {data.context_rationale}
+                        </pre>
+                      </div>
+                    </details>
+                  )}
+                </div>
+
+                {/* 4. HORIZONTAL EVIDENCE SOURCES */}
+                {evidenceEntries.length > 0 && (
+                  <div className="pl-11 mt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Sources</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowOnlyCited((v) => !v)}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                      >
+                        {showOnlyCited ? "Show All" : "Show Cited Only"}
+                      </button>
+                    </div>
+                    
+                    <div className="flex overflow-x-auto gap-3 pb-4 hide-scrollbar snap-x">
+                      {evidenceEntries.map(([id, meta]) => {
+                        const isHighlighted = highlightId === `${index}-${id}`;
+                        const isCited = citedSet.has(id);
+
+                        return (
+                          <div
+                            key={id}
+                            id={evidenceElementId(id, index)}
+                            className={`flex-none w-64 sm:w-72 flex flex-col p-4 rounded-2xl border snap-start transition-all duration-500 ${
+                              isHighlighted
+                                ? "bg-indigo-500/10 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.2)]"
+                                : isCited
+                                ? "bg-zinc-900 border-white/10 hover:border-white/20"
+                                : "bg-zinc-900/50 border-white/5 opacity-50"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold text-zinc-300">[{id}]</span>
+                              <span className="text-[10px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full">
+                                Page {formatPageLabel(meta)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed mb-3 flex-grow">
+                              {meta.snippet ?? "No text snippet available."}
+                            </p>
+                            <div className="text-[10px] text-zinc-500 font-medium truncate mt-auto">
+                              {formatSource(meta.source)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
             </div>
           );
         })}
 
-        {/* LOADING SKELETON */}
+        {/* PROCESSING SKELETON */}
         {loading && (
-          <div className="grid gap-6 lg:grid-cols-2 bg-zinc-950/20 p-6 rounded-3xl border border-indigo-500/20 shadow-[0_0_30px_rgba(99,102,241,0.05)] animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex flex-col gap-6">
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-2 flex items-center gap-2">
-                  <Spinner /> Sending...
-                </div>
-                <div className="text-zinc-100 font-medium text-lg opacity-70">{question}</div>
+          <div className="flex flex-col gap-6 w-full animate-in fade-in duration-500">
+            <div className="flex justify-end w-full">
+              <div className="bg-zinc-800 text-zinc-100 px-5 py-3.5 rounded-3xl rounded-tr-sm max-w-[85%] sm:max-w-[75%] text-[15px] opacity-70">
+                {question}
               </div>
-
-              <Card>
-                <CardHeader title="Evidence" subtitle="Scanning documents..." />
-                <CardBody>
-                  <div className="flex flex-col gap-3">
-                    <div className="h-24 bg-white/5 rounded-2xl animate-pulse"></div>
-                    <div className="h-24 bg-white/5 rounded-2xl animate-pulse delay-75"></div>
-                  </div>
-                </CardBody>
-              </Card>
             </div>
 
-            <div className="flex flex-col gap-6 lg:self-start">
-              <div className="h-14 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl animate-pulse flex items-center px-4">
-                <span className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Agentic Planning in progress...
-                </span>
+            <div className="flex flex-col gap-4 w-full">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400">
+                  <Spinner />
+                </div>
+                <span className="font-semibold text-zinc-200">Processing...</span>
               </div>
 
-              {/* Added a loader step for the new Critic agent */}
-              <div className="h-14 bg-amber-500/10 border border-amber-500/20 rounded-2xl animate-pulse flex items-center px-4 delay-75">
-                <span className="text-sm font-semibold text-amber-300 flex items-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Context Critic evaluating chunks...
-                </span>
+              <div className="pl-11 flex flex-col gap-3 w-full max-w-lg">
+                <div className="h-10 bg-white/5 border border-white/10 rounded-xl flex items-center px-4 animate-pulse">
+                  <span className="text-xs font-medium text-zinc-400">Analyzing user intent...</span>
+                </div>
+                <div className="h-10 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center px-4 animate-pulse delay-75">
+                  <span className="text-xs font-medium text-indigo-300">Searching vector database...</span>
+                </div>
+                <div className="h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center px-4 animate-pulse delay-150">
+                  <span className="text-xs font-medium text-amber-300">Critic evaluating chunks...</span>
+                </div>
               </div>
-
-              <Card>
-                <CardHeader title="Assistant Answer" />
-                <CardBody>
-                  <div className="space-y-4 pt-2">
-                    <div className="h-3 bg-white/10 rounded-full w-3/4 animate-pulse"></div>
-                    <div className="h-3 bg-white/10 rounded-full w-full animate-pulse delay-75"></div>
-                    <div className="h-3 bg-white/10 rounded-full w-5/6 animate-pulse delay-150"></div>
-                    <div className="h-3 bg-white/10 rounded-full w-4/6 animate-pulse delay-200"></div>
-                  </div>
-                </CardBody>
-              </Card>
             </div>
           </div>
         )}
-        <div ref={chatEndRef} className="h-4" /> 
+        
+        {/* Invisible anchor for auto-scroll */}
+        <div ref={chatEndRef} className="h-10" /> 
       </div>
 
-      {/* INPUT AREA */}
-      <div className="sticky bottom-6 z-10 w-full mt-auto">
-        <Card className="shadow-2xl shadow-black/50 border-white/20 bg-zinc-900/95 backdrop-blur-md">
-          <CardBody>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-zinc-400">Search Scope:</span>
-              <button
-                type="button"
-                onClick={() => setScopeMode("all")}
-                className={`rounded-lg border px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition ${
-                  scopeMode === "all"
-                    ? "border-white/30 bg-white/10 text-zinc-100"
-                    : "border-white/5 bg-transparent text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
-                }`}
-              >
-                All Documents
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeMode("selected")}
-                disabled={!lastUploaded}
-                className={`rounded-lg border px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition ${
-                  !lastUploaded
-                    ? "border-transparent bg-transparent text-zinc-700 cursor-not-allowed"
-                    : scopeMode === "selected"
-                    ? "border-white/30 bg-white/10 text-zinc-100"
-                    : "border-white/5 bg-transparent text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
-                }`}
-              >
-                {lastUploaded ? `Selected: ${lastUploaded.slice(0, 20)}...` : "Upload PDF to focus"}
-              </button>
-            </div>
+      {/* FLOATING GLASS DOCK (INPUT) */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-50">
+        <div className="bg-zinc-900/70 backdrop-blur-xl border border-white/10 rounded-[2rem] p-3 shadow-2xl flex flex-col gap-2 relative">
+          
+          {/* Scope Controls */}
+          <div className="flex items-center gap-2 px-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Scope</span>
+            <button
+              type="button"
+              onClick={() => setScopeMode("all")}
+              className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
+                scopeMode === "all"
+                  ? "bg-white/15 text-zinc-100"
+                  : "bg-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              All Docs
+            </button>
+            <button
+              type="button"
+              onClick={() => setScopeMode("selected")}
+              disabled={!lastUploaded}
+              className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
+                !lastUploaded
+                  ? "opacity-50 cursor-not-allowed"
+                  : scopeMode === "selected"
+                  ? "bg-white/15 text-zinc-100"
+                  : "bg-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              {lastUploaded ? `Selected: ${lastUploaded.slice(0, 15)}...` : "Upload PDF"}
+            </button>
+          </div>
 
-            <div className="relative">
-              <textarea
-                disabled={loading}
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (canAsk) onAsk();
-                  }
-                }}
-                placeholder={loading ? "Waiting for IntelliRAG..." : "Message IntelliRAG... (Shift+Enter for new line)"}
-                className="w-full min-h-[80px] max-h-[200px] resize-y rounded-2xl border border-white/10 bg-black/40 p-4 pr-24 text-sm placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all scrollbar-thin disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <div className="absolute right-3 bottom-3">
-                <Button onClick={onAsk} disabled={!canAsk} className="rounded-xl px-4 py-2 shadow-lg">
-                  {loading ? <Spinner /> : "Send"}
-                </Button>
-              </div>
+          {/* Input Area */}
+          <div className="relative flex items-end gap-2 bg-black/40 rounded-2xl border border-white/5 p-1 pr-2">
+            <textarea
+              disabled={loading}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (canAsk) onAsk();
+                }
+              }}
+              placeholder={loading ? "Generating response..." : "Ask IntelliRAG anything..."}
+              className="flex-grow min-h-[44px] max-h-[150px] resize-none bg-transparent p-3 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none scrollbar-thin disabled:opacity-50"
+              rows={1}
+            />
+            <button 
+              onClick={onAsk} 
+              disabled={!canAsk} 
+              className="mb-1 p-2.5 rounded-xl bg-zinc-100 text-black font-semibold disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500 transition-all hover:bg-white shrink-0 shadow-lg"
+            >
+              {loading ? <Spinner /> : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              )}
+            </button>
+          </div>
+          
+          {error && (
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-2">
+              {error}
             </div>
-
-            {error ? (
-              <div className="mt-3 text-xs text-red-400 font-medium">
-                Error: {error}
-              </div>
-            ) : null}
-          </CardBody>
-        </Card>
+          )}
+        </div>
       </div>
     </div>
   );

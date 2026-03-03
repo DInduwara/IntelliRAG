@@ -1,13 +1,12 @@
 /**
- * Helpers for working with citation tokens in answer strings.
- * Tokens must be formatted in square brackets, e.g.:
- * - [C1]
- * - [P7-C1]
- * - [P7-C12]
+ * Citation Parsing & Tokenization Module
  *
- * This module:
- * - extracts citation ids
- * - tokenizes answer to render citations as interactive elements
+ * Helpers for working with citation tokens in LLM answer strings.
+ * Tokens must be formatted in square brackets.
+ * * Architecture Note (Feature 4): 
+ * The regex `/\[([^\[\]\n]{1,40})\]/g` is strictly coupled to the Python backend's
+ * `_CITATION_RE = re.compile(r"\[([^\[\]\n]{1,40})\]")`. This ensures that exactly 
+ * what the LangGraph verification node outputs is safely parsed by the React frontend.
  */
 
 export type AnswerToken =
@@ -15,7 +14,8 @@ export type AnswerToken =
   | { type: "citation"; id: string };
 
 /**
- * Extract citation IDs in the order they appear (deduplicated).
+ * Extracts all unique citation IDs from an answer string in the order they appear.
+ * Used to calculate which evidence cards need to be rendered in the UI sidebar.
  */
 export function extractCitationIds(answer: string): string[] {
   const re = /\[([^\[\]\n]{1,40})\]/g;
@@ -26,13 +26,14 @@ export function extractCitationIds(answer: string): string[] {
     ids.push(m[1]);
   }
 
-  // Deduplicate while preserving order
+  // Deduplicate while preserving original appearance order
   return Array.from(new Set(ids));
 }
 
 /**
- * Split answer into text and citation tokens.
- * This allows rendering clickable citation chips inside the answer.
+ * Splits an unbroken answer string into text and citation tokens.
+ * This allows the UI to render the string safely, while injecting the interactive 
+ * <CitationTag /> React component wherever a bracketed ID is found.
  */
 export function tokenizeAnswer(answer: string): AnswerToken[] {
   const re = /\[([^\[\]\n]{1,40})\]/g;
@@ -53,6 +54,7 @@ export function tokenizeAnswer(answer: string): AnswerToken[] {
     lastIndex = end;
   }
 
+  // Push any remaining text after the final citation
   if (lastIndex < answer.length) {
     out.push({ type: "text", value: answer.slice(lastIndex) });
   }
