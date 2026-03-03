@@ -278,7 +278,7 @@ export default function Page() {
             <div className="flex flex-col gap-6">
               <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-2 flex items-center gap-2">
-                  <Spinner size="sm" /> Sending...
+                  <Spinner /> Sending...
                 </div>
                 <div className="text-zinc-100 font-medium text-lg opacity-70">{question}</div>
               </div>
