@@ -13,7 +13,6 @@ export type CitationItem = {
 
 export type CitationsMap = Record<string, CitationItem>;
 
-// NEW FEATURE 2: Interface for the trace logs
 export type RetrievalTrace = {
   call_number: number;
   query: string;
@@ -45,4 +44,16 @@ export type QARequest = {
   question: string;
   thread_id?: string;
   document_scope?: string | null;
+};
+
+// --- NEW FILE MANAGEMENT TYPES ---
+
+export type FileItem = {
+  id: number;
+  filename: string;
+  upload_timestamp: string;
+};
+
+export type FileListResponse = {
+  files: FileItem[];
 };

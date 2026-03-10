@@ -15,14 +15,13 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 load_dotenv()
 
-from .models import QuestionRequest, QAResponse, FileListResponse
+from .models import QuestionRequest, QAResponse, FileListResponse, DeleteFilesRequest
 from .services.qa_service import answer_question
 from .services.indexing_service import index_pdf_file
 from .core.config import get_settings, current_user_id
-from .core.retrieval.vector_store import delete_user_vectors
 
-# IMPORT THE NEW DB HELPER
-from .core.db import init_db, save_file_metadata, get_user_files, delete_user_file_metadata
+from .core.retrieval.vector_store import delete_user_vectors, delete_specific_vectors
+from .core.db import init_db, save_file_metadata, get_user_files, delete_user_file_metadata, delete_specific_user_files
 
 try:
     from openai import RateLimitError as OpenAIRateLimitError  
@@ -66,7 +65,6 @@ def verify_clerk_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         jwks_client = PyJWKClient(f"{issuer}/.well-known/jwks.json")
         signing_key = jwks_client.get_signing_key_from_jwt(token)
   
-        
         data = jwt.decode(
             token,
             signing_key.key,
@@ -146,12 +144,42 @@ async def index_pdf(file: UploadFile = File(...), user_id: str = Depends(verify_
         "message": "PDF isolated, indexed, and secured successfully.",
     }
 
-# --- NEW GET FILES ENDPOINT ---
 @app.get("/my-files", response_model=FileListResponse, status_code=status.HTTP_200_OK)
 async def list_my_files(user_id: str = Depends(verify_clerk_token)):
     """Fetches a list of files that belong only to the authenticated user."""
     files = get_user_files(user_id)
     return {"files": files}
+
+@app.delete("/my-files", status_code=status.HTTP_200_OK)
+async def delete_selected_files(payload: DeleteFilesRequest, user_id: str = Depends(verify_clerk_token)) -> dict:
+    """Deletes specific files from disk, Neon, and Pinecone based on user selection."""
+    current_user_id.set(user_id)
+    filenames = payload.filenames
+    
+    if not filenames:
+        return {"message": "No files selected.", "deleted_count": 0}
+
+    # 1. Delete from Server Disk
+    deleted_count = 0
+    upload_dir = Path(f"data/uploads/{user_id}")
+    
+    if upload_dir.exists():
+        for fname in filenames:
+            file_path = upload_dir / fname
+            if file_path.exists() and file_path.is_file():
+                file_path.unlink(missing_ok=True)
+                deleted_count += 1
+
+    # 2. Delete vectors from Pinecone
+    delete_specific_vectors(filenames)
+
+    # 3. Delete metadata from Neon Postgres
+    delete_specific_user_files(user_id, filenames)
+
+    return {
+        "message": f"Successfully deleted {deleted_count} file(s).",
+        "deleted_count": deleted_count,
+    }
 
 @app.delete("/admin/clear", status_code=status.HTTP_200_OK)
 async def admin_clear_all(user_id: str = Depends(verify_clerk_token)) -> dict:

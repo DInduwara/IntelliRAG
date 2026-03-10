@@ -150,3 +150,32 @@ def delete_user_vectors() -> None:
         index.delete(filter={"user_id": user_id})
     except PineconeApiException as e:
         raise RuntimeError(f"Pinecone delete_user_vectors failed: {e}") from e
+
+
+def delete_specific_vectors(filenames: List[str]) -> None:
+    """
+    Deletes specific vectors from Pinecone based on the filenames.
+    """
+    if not filenames:
+        return
+        
+    settings = get_settings()
+    user_id = current_user_id.get()
+    
+    if not user_id:
+        raise RuntimeError("Cannot clear vectors: No active user context.")
+
+    pc = Pinecone(api_key=settings.pinecone_api_key)
+    index = pc.Index(settings.pinecone_index_name)
+
+    # Reconstruct the exact source paths that were injected during indexing
+    sources = [str(Path(f"data/uploads/{user_id}/{fname}")) for fname in filenames]
+
+    try:
+        # Pinecone allows filtering by multiple values using the "$in" operator
+        index.delete(filter={
+            "user_id": user_id,
+            "source": {"$in": sources}
+        })
+    except PineconeApiException as e:
+        raise RuntimeError(f"Pinecone targeted delete failed: {e}") from e

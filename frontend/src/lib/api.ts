@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from "./env";
-import type { IndexPdfResponse, QARequest, QAResponse } from "./types";
+import type { IndexPdfResponse, QARequest, QAResponse, FileListResponse } from "./types";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -28,7 +28,6 @@ async function safeJson(res: Response): Promise<unknown> {
   }
 }
 
-// Added an optional 'token' parameter to handle authenticated requests
 async function request<T>(path: string, init?: RequestInit, token?: string): Promise<T> {
   const base = getApiBaseUrl();
   const url = `${base}${path}`;
@@ -37,7 +36,6 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
     ...((init?.headers as Record<string, string>) || {}) 
   };
   
-  // If a Clerk JWT token is provided, attach it as a Bearer token
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -65,7 +63,6 @@ async function request<T>(path: string, init?: RequestInit, token?: string): Pro
   return data as T;
 }
 
-// Updated exports to accept the optional auth token
 export async function askQuestion(payload: QARequest, token?: string): Promise<QAResponse> {
   return request<QAResponse>("/qa", {
     method: "POST",
@@ -84,11 +81,17 @@ export async function indexPdf(file: File, token?: string): Promise<IndexPdfResp
   }, token);
 }
 
-export async function adminClearAll(adminKey: string, token?: string): Promise<{ message: string; deleted_files?: number }> {
-  return request<{ message: string; deleted_files?: number }>("/admin/clear", {
+export async function deleteMyFiles(filenames: string[], token?: string): Promise<{ message: string; deleted_count: number }> {
+  return request<{ message: string; deleted_count: number }>("/my-files", {
     method: "DELETE",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filenames }),
+  }, token);
+}
+
+// --- NEW API CALL FOR FETCHING USER FILES ---
+export async function getMyFiles(token?: string): Promise<FileListResponse> {
+  return request<FileListResponse>("/my-files", {
+    method: "GET",
   }, token);
 }

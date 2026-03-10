@@ -22,7 +22,7 @@ class QAResponse(BaseModel):
     confidence: str = "low"
     thread_id: Optional[str] = None
 
-# --- NEW MODELS FOR FILE MANAGEMENT ---
+# --- MODELS FOR FILE MANAGEMENT ---
 
 class FileItem(BaseModel):
     id: int
@@ -31,3 +31,6 @@ class FileItem(BaseModel):
 
 class FileListResponse(BaseModel):
     files: List[FileItem]
+
+class DeleteFilesRequest(BaseModel):
+    filenames: List[str]

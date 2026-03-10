@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "@clerk/nextjs"; // <-- NEW: Import Clerk's auth hook
-import { askQuestion } from "@/lib/api";
-import type { QAResponse, CitationsMap } from "@/lib/types";
+import { useAuth } from "@clerk/nextjs";
+import { askQuestion, getMyFiles } from "@/lib/api";
+import type { QAResponse, CitationsMap, FileItem } from "@/lib/types";
 import { Button } from "@/components/Button";
 import { Spinner } from "@/components/Spinner";
 import { CitationTag } from "@/components/CitationTag";
@@ -27,12 +27,16 @@ function evidenceElementId(citationId: string, index: number) {
 }
 
 export default function Page() {
-  const { getToken } = useAuth(); // <-- NEW: Initialize the token fetcher
+  const { getToken } = useAuth();
 
   const [question, setQuestion] = useState("");
   const [threadId] = useState(() => crypto.randomUUID());
-  const [lastUploaded, setLastUploaded] = useState<string | null>(null);
-  const [scopeMode, setScopeMode] = useState<"all" | "selected">("all");
+  
+  // FILE MANAGEMENT STATE
+  const [userFiles, setUserFiles] = useState<FileItem[]>([]);
+  const [selectedScope, setSelectedScope] = useState<string | null>(null); // null = All Docs
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,10 +51,20 @@ export default function Page() {
   const highlightTimer = useRef<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch user files on mount
   useEffect(() => {
-    const v = window.localStorage.getItem("intelirag:lastUploadedPdf");
-    setLastUploaded(v || null);
-  }, []);
+    async function loadFiles() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await getMyFiles(token);
+        setUserFiles(res.files);
+      } catch (err) {
+        console.error("Failed to load user files:", err);
+      }
+    }
+    loadFiles();
+  }, [getToken]);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -70,7 +84,6 @@ export default function Page() {
     const el = document.getElementById(evidenceElementId(id, messageIndex));
     if (!el) return;
     
-    // Smooth scroll horizontally if it's in a scrollable row
     el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
     setHighlightId(`${messageIndex}-${id}`);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
@@ -79,23 +92,16 @@ export default function Page() {
 
   async function onAsk() {
     setError(null);
-    const document_scope = scopeMode === "selected" ? lastUploaded : null;
-
-    if (scopeMode === "selected" && !lastUploaded) {
-      setError("No selected PDF found. Upload a PDF first.");
-      return;
-    }
 
     try {
       setLoading(true);
-      
-      const token = await getToken(); // <-- NEW: Fetch live token
+      const token = await getToken();
       
       const res = await askQuestion({
         question: question.trim(),
-        document_scope,
+        document_scope: selectedScope, 
         thread_id: threadId,
-      }, token || undefined); // <-- NEW: Pass token to API
+      }, token || undefined);
 
       setChatHistory((prev) => [...prev, { q: question.trim(), r: res }]);
       setQuestion(""); 
@@ -159,7 +165,6 @@ export default function Page() {
 
               {/* 2. AI RESPONSE CONTAINER */}
               <div className="flex flex-col gap-4 w-full">
-                {/* AI Header & Avatar */}
                 <div className="flex items-center gap-3">
                   <div className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-400">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -168,7 +173,6 @@ export default function Page() {
                   </div>
                   <span className="font-semibold text-zinc-200">IntelliRAG</span>
                   
-                  {/* Confidence Badge */}
                   <span className={`ml-2 px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-bold border ${
                     confidence === "high" ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10" :
                     confidence === "medium" ? "border-amber-500/30 text-amber-400 bg-amber-500/10" :
@@ -345,40 +349,106 @@ export default function Page() {
 
       {/* FLOATING GLASS DOCK (INPUT) */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 z-50">
-        <div className="bg-zinc-900/70 backdrop-blur-xl border border-white/10 rounded-[2rem] p-3 shadow-2xl flex flex-col gap-2 relative">
+        <div className="bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-[2rem] p-3 shadow-2xl flex flex-col gap-2 relative">
           
-          {/* Scope Controls */}
-          <div className="flex items-center gap-2 px-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Scope</span>
-            <button
-              type="button"
-              onClick={() => setScopeMode("all")}
-              className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
-                scopeMode === "all"
-                  ? "bg-white/15 text-zinc-100"
-                  : "bg-transparent text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              All Docs
-            </button>
-            <button
-              type="button"
-              onClick={() => setScopeMode("selected")}
-              disabled={!lastUploaded}
-              className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition ${
-                !lastUploaded
-                  ? "opacity-50 cursor-not-allowed"
-                  : scopeMode === "selected"
-                  ? "bg-white/15 text-zinc-100"
-                  : "bg-transparent text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              {lastUploaded ? `Selected: ${lastUploaded.slice(0, 15)}...` : "Upload PDF"}
-            </button>
+          {/* MODERN CUSTOM UI DROPDOWN */}
+          <div className="flex items-center gap-3 px-3 py-1 relative">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Search In</span>
+            
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className={`flex items-center justify-between gap-3 bg-black/40 text-zinc-200 text-xs rounded-full px-4 py-1.5 border transition-all focus:outline-none min-w-[180px] shadow-sm ${
+                  isDropdownOpen 
+                    ? "border-indigo-500/50 bg-indigo-500/5 ring-2 ring-indigo-500/20" 
+                    : "border-white/10 hover:bg-white/5 hover:border-white/20"
+                }`}
+              >
+                <span className="truncate max-w-[150px] sm:max-w-[200px] font-medium">
+                  {selectedScope === null 
+                    ? "All Uploaded Documents" 
+                    : selectedScope.length > 25 ? selectedScope.slice(0, 25) + "..." : selectedScope}
+                </span>
+                <svg className={`w-3 h-3 text-zinc-400 transition-transform duration-300 shrink-0 ${isDropdownOpen ? 'rotate-180 text-indigo-400' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Custom Dropdown Menu (Opens Upwards) */}
+              {isDropdownOpen && (
+                <>
+                  {/* Invisible backdrop to close dropdown when clicking outside */}
+                  <div 
+                    className="fixed inset-0 z-40 cursor-default" 
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                  
+                  <div className="absolute bottom-[calc(100%+12px)] left-0 mb-1 w-full min-w-[240px] bg-zinc-800/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-3 duration-200">
+                    <div className="max-h-[260px] overflow-y-auto flex flex-col p-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedScope(null);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`text-left px-3 py-2.5 text-xs rounded-xl transition-all flex items-center gap-2.5 outline-none ${
+                          selectedScope === null 
+                            ? "bg-indigo-500/20 text-indigo-300 font-medium shadow-inner" 
+                            : "text-zinc-300 hover:bg-white/5 hover:text-zinc-100 focus:bg-white/5"
+                        }`}
+                      >
+                        <div className={`flex items-center justify-center w-6 h-6 rounded-md shrink-0 ${selectedScope === null ? "bg-indigo-500/30 text-indigo-300" : "bg-white/5 text-zinc-400"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                        </div>
+                        All Uploaded Documents
+                      </button>
+                      
+                      {userFiles.length > 0 && <div className="h-px bg-white/5 my-1.5 mx-2" />}
+                      
+                      {userFiles.length === 0 && (
+                        <div className="px-3 py-3 text-xs text-zinc-500 text-center italic">
+                          No documents uploaded yet.
+                        </div>
+                      )}
+
+                      {userFiles.map(file => (
+                        <button
+                          key={file.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedScope(file.filename);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`text-left px-3 py-2.5 text-xs rounded-xl transition-all flex items-center gap-2.5 outline-none group ${
+                            selectedScope === file.filename 
+                              ? "bg-indigo-500/20 text-indigo-300 font-medium shadow-inner" 
+                              : "text-zinc-300 hover:bg-white/5 hover:text-zinc-100 focus:bg-white/5"
+                          }`}
+                          title={file.filename}
+                        >
+                          <div className={`flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-colors ${
+                            selectedScope === file.filename ? "bg-indigo-500/30 text-indigo-300" : "bg-white/5 text-zinc-400 group-hover:text-zinc-300 group-hover:bg-white/10"
+                          }`}>
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </div>
+                          <span className="truncate">{file.filename}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Input Area */}
-          <div className="relative flex items-end gap-2 bg-black/40 rounded-2xl border border-white/5 p-1 pr-2">
+          <div className="relative flex items-end gap-2 bg-black/40 rounded-2xl border border-white/5 p-1 pr-2 shadow-inner focus-within:border-white/10 focus-within:bg-black/60 transition-colors">
             <textarea
               disabled={loading}
               value={question}
@@ -396,7 +466,7 @@ export default function Page() {
             <button 
               onClick={onAsk} 
               disabled={!canAsk} 
-              className="mb-1 p-2.5 rounded-xl bg-zinc-100 text-black font-semibold disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500 transition-all hover:bg-white shrink-0 shadow-lg"
+              className="mb-1 p-2.5 rounded-xl bg-zinc-100 text-black font-semibold disabled:opacity-30 disabled:bg-zinc-800 disabled:text-zinc-500 transition-all hover:bg-white shrink-0 shadow-[0_0_15px_rgba(255,255,255,0.1)] active:scale-95"
             >
               {loading ? <Spinner /> : (
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -407,7 +477,7 @@ export default function Page() {
           </div>
           
           {error && (
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow-lg backdrop-blur-md animate-in slide-in-from-bottom-2">
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow-[0_5px_20px_rgba(239,68,68,0.3)] backdrop-blur-md animate-in slide-in-from-bottom-2">
               {error}
             </div>
           )}
