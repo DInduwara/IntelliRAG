@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import jwt
 from jwt import PyJWKClient
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,18 +15,27 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 load_dotenv()
 
-from .models import QuestionRequest, QAResponse
+from .models import QuestionRequest, QAResponse, FileListResponse
 from .services.qa_service import answer_question
 from .services.indexing_service import index_pdf_file
 from .core.config import get_settings, current_user_id
 from .core.retrieval.vector_store import delete_user_vectors
+
+# IMPORT THE NEW DB HELPER
+from .core.db import init_db, save_file_metadata, get_user_files, delete_user_file_metadata
 
 try:
     from openai import RateLimitError as OpenAIRateLimitError  
 except Exception:
     OpenAIRateLimitError = None  
 
-app = FastAPI(title="IntelliRAG Multi-Tenant API", version="1.0.0")
+# Run startup events (like creating our Neon tables)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="IntelliRAG Multi-Tenant API", version="1.0.0", lifespan=lifespan)
 
 settings = get_settings()
 app.add_middleware(
@@ -47,18 +57,16 @@ def verify_clerk_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     s = get_settings()
     
     try:
-        # Decode without verification first just to get the issuer URL
         unverified_claims = jwt.decode(token, options={"verify_signature": False})
         issuer = unverified_claims.get("iss")
         
         if s.clerk_issuer_url and issuer != s.clerk_issuer_url:
             raise ValueError("Token issuer mismatch. Unauthorized instance.")
 
-        # Dynamically fetch the public keys from your Clerk app
         jwks_client = PyJWKClient(f"{issuer}/.well-known/jwks.json")
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+  
         
-        # Perform strict cryptographic verification
         data = jwt.decode(
             token,
             signing_key.key,
@@ -89,7 +97,6 @@ async def qa_endpoint(payload: QuestionRequest, user_id: str = Depends(verify_cl
     if not question:
         raise HTTPException(status_code=400, detail="Question required.")
         
-    # Inject user_id into the global request context for the Vector Store to read
     current_user_id.set(user_id)
     thread_id = payload.thread_id or f"session-{user_id}"
 
@@ -119,8 +126,6 @@ async def index_pdf(file: UploadFile = File(...), user_id: str = Depends(verify_
 
     current_user_id.set(user_id)
 
-    # FEATURE: Multitenant File Storage
-    # Files are now saved in isolated directories based on the user's ID
     upload_dir = Path(f"data/uploads/{user_id}")
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,6 +135,8 @@ async def index_pdf(file: UploadFile = File(...), user_id: str = Depends(verify_
 
     try:
         chunks_indexed = index_pdf_file(file_path)
+        # FEATURE: Save file metadata to Neon DB upon successful ingestion
+        save_file_metadata(user_id, file.filename, str(file_path))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {str(e)}")
 
@@ -139,12 +146,15 @@ async def index_pdf(file: UploadFile = File(...), user_id: str = Depends(verify_
         "message": "PDF isolated, indexed, and secured successfully.",
     }
 
+# --- NEW GET FILES ENDPOINT ---
+@app.get("/my-files", response_model=FileListResponse, status_code=status.HTTP_200_OK)
+async def list_my_files(user_id: str = Depends(verify_clerk_token)):
+    """Fetches a list of files that belong only to the authenticated user."""
+    files = get_user_files(user_id)
+    return {"files": files}
+
 @app.delete("/admin/clear", status_code=status.HTTP_200_OK)
 async def admin_clear_all(user_id: str = Depends(verify_clerk_token)) -> dict:
-    """
-    User-specific reset. Because we have authentication, users can safely wipe 
-    their own data without needing an Admin Key, and without affecting other users.
-    """
     current_user_id.set(user_id)
     upload_dir = Path(f"data/uploads/{user_id}")
     deleted_files = 0
@@ -157,6 +167,9 @@ async def admin_clear_all(user_id: str = Depends(verify_clerk_token)) -> dict:
         shutil.rmtree(upload_dir, ignore_errors=True)
 
     delete_user_vectors()
+    
+    # Clean up the SQL Database entries as well
+    delete_user_file_metadata(user_id)
 
     return {
         "message": "Your private documents and vector index have been cleared.",

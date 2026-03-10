@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 class QuestionRequest(BaseModel):
     question: str = Field(..., description="The user's question.")
@@ -13,7 +14,6 @@ class QAResponse(BaseModel):
     sub_questions: Optional[List[str]] = None
     citations: Optional[Dict[str, Any]] = None
     
-
     retrieval_traces: Optional[List[Dict[str, Any]]] = None
     
     raw_context: Optional[str] = None
@@ -21,3 +21,13 @@ class QAResponse(BaseModel):
     
     confidence: str = "low"
     thread_id: Optional[str] = None
+
+# --- NEW MODELS FOR FILE MANAGEMENT ---
+
+class FileItem(BaseModel):
+    id: int
+    filename: str
+    upload_timestamp: datetime
+
+class FileListResponse(BaseModel):
+    files: List[FileItem]
