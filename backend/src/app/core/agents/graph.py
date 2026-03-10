@@ -82,21 +82,22 @@ def get_postgres_saver() -> PostgresSaver:
     """
     Singleton factory for the PostgresSaver.
     We create a connection pool to Neon.tech and pass it to LangGraph.
-    LangGraph's PostgresSaver uses this pool to save and load thread states.
     """
     settings = get_settings()
-    # It's important to use max_size=10 (or similar) to prevent exhausting
-    # connection limits on serverless databases like Neon.
-    pool = ConnectionPool(conninfo=settings.database_url, max_size=10, open=False)
+    
+    # FIX: Added kwargs={"autocommit": True} right here 
+    # This prevents the "CREATE INDEX CONCURRENTLY" transaction error!
+    pool = ConnectionPool(
+        conninfo=settings.database_url, 
+        max_size=10, 
+        kwargs={"autocommit": True}, 
+        open=False
+    )
     pool.open()
     
     saver = PostgresSaver(pool)
-    
-    # Run migrations: this automatically creates the required "checkpoints" 
-    # and "checkpoint_writes" tables in your database if they don't exist yet!
     saver.setup() 
     return saver
-
 
 def create_qa_graph() -> Any:
     builder = StateGraph(QAState)

@@ -51,3 +51,18 @@ def delete_user_file_metadata(user_id: str):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM user_files WHERE user_id = %s", (user_id,))
         conn.commit()
+
+def delete_specific_user_files(user_id: str, filenames: list):
+    """Deletes specific files for a user from the Neon database."""
+    if not filenames:
+        return
+        
+    settings = get_settings()
+    with psycopg.connect(settings.database_url) as conn:
+        with conn.cursor() as cur:
+            # We use ANY(%s) to match the list of filenames safely in PostgreSQL
+            cur.execute(
+                "DELETE FROM user_files WHERE user_id = %s AND filename = ANY(%s)",
+                (user_id, filenames)
+            )
+        conn.commit()
